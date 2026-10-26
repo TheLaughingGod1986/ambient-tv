@@ -91,14 +91,15 @@ class HomeActivity:Activity() {
   val expanded=!compactLayout || focusViews.filterKeys{it.startsWith("nav:")}.values.any{it.hasFocus()}
   if(sidebarExpanded==expanded)return
   val first=sidebarExpanded==null;sidebarExpanded=expanded;sidebarAnimation?.cancel()
-  val start=sidebarPanel.layoutParams.width;val end=p(if(expanded)244 else 104)
+  val fullWidth=if(compactLayout)244 else 220;val navWidth=if(compactLayout)196 else 180
+  val start=sidebarPanel.layoutParams.width;val end=p(if(expanded)fullWidth else 104)
   sidebarNames.forEachIndexed{i,label->(focusViews["nav:$i"] as? TextView)?.let{v->
    v.text=if(expanded)label else "";v.compoundDrawablePadding=if(expanded)p(14)else 0
    v.setPadding(p(17),p(8),p(12),p(8));v.bringToFront()
   }}
   fun frame(width:Int){val lp=sidebarPanel.layoutParams;lp.width=width;sidebarPanel.layoutParams=lp
-   val amount=((width-p(104)).toFloat()/p(140).coerceAtLeast(1)).coerceIn(0f,1f)
-   sidebarNames.indices.forEach{i->focusViews["nav:$i"]?.let{v->val n=v.layoutParams;n.width=(p(64)+(p(196)-p(64))*amount).toInt();v.layoutParams=n}}
+   val amount=((width-p(104)).toFloat()/p(fullWidth-104).coerceAtLeast(1)).coerceIn(0f,1f)
+   sidebarNames.indices.forEach{i->focusViews["nav:$i"]?.let{v->val n=v.layoutParams;n.width=(p(64)+(p(navWidth)-p(64))*amount).toInt();v.layoutParams=n}}
   }
   val motion=Settings.Global.getFloat(contentResolver,Settings.Global.ANIMATOR_DURATION_SCALE,1f)>0f
   if(first || !motion)frame(end) else sidebarAnimation=android.animation.ValueAnimator.ofInt(start,end).apply{duration=180;addUpdateListener{frame(it.animatedValue as Int)};start()}
