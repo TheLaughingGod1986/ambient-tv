@@ -18,13 +18,19 @@ jobs:
         with:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
-      - name: Prepare emulator
+      - name: Install emulator image
         run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y libpulse0 libxkbcommon-x11-0 libxcb-cursor0
           sudo chmod a+rw /dev/kvm
           sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'emulator' 'system-images;android-35;google_apis;x86_64'
+      - name: Boot emulator
+        timeout-minutes: 7
+        run: |
+          trap 'cat /tmp/emulator.log 2>/dev/null || true' ERR
           echo no | avdmanager create avd --name tv-test --package 'system-images;android-35;google_apis;x86_64'
-          "$ANDROID_HOME/emulator/emulator" -avd tv-test -no-window -no-audio -no-snapshot -gpu swiftshader_indirect > /tmp/emulator.log 2>&1 &
-          adb wait-for-device
+          "$ANDROID_HOME/emulator/emulator" -avd tv-test -no-window -no-audio -no-snapshot -no-boot-anim -no-metrics -memory 2048 -cores 2 -gpu swiftshader_indirect -feature -Vulkan > /tmp/emulator.log 2>&1 &
+          timeout 120 adb wait-for-device
           timeout 300 bash -c 'until adb shell getprop sys.boot_completed | grep -q 1; do sleep 2; done'
           adb shell input keyevent 82
       - name: Build and exercise both TV resolutions
