@@ -25,7 +25,7 @@ class HomeActivity:Activity() {
  private fun photoFiles()=previewFiles ?: Photos.currentFiles(this)
  internal fun pageForTest()=page
  internal fun focusForTest(key:String){check(focusViews[key]?.requestFocus()==true)}
- internal fun sidebarExpandedForTest()=backdrop.sidebarExpanded
+ internal fun sidebarExpandedForTest()=sidebarExpanded==true
  internal fun focusKeyForTest()=focusViews.entries.firstOrNull{it.value.hasFocus()}?.key
  internal fun feedSnapshotForTest()=displayedWatchItems.toList()
  internal fun feedObservingForTest()=observingFeed
@@ -80,19 +80,30 @@ class HomeActivity:Activity() {
   }
  }
  private lateinit var backdrop:HomeBackdropView
+ private lateinit var sidebarPanel:View
+ private var compactLayout=false
+ private var sidebarExpanded:Boolean?=null
+ private var sidebarAnimation:android.animation.ValueAnimator?=null
  private val sidebarNames=listOf("Home","TV Shows","Movies","Anime","Apps","Photos","Search","Settings")
  private val sidebarUpdate=Runnable{updateSidebar()}
  private fun updateSidebar(){
-  if(!::backdrop.isInitialized)return
-  val compact=getSharedPreferences("home-ui",0).getBoolean("compactSidebar",false)
-  val expanded=!compact || focusViews.filterKeys{it.startsWith("nav:")}.values.any{it.hasFocus()}
-  backdrop.sidebarExpanded=expanded
+  if(!::sidebarPanel.isInitialized)return
+  val expanded=!compactLayout || focusViews.filterKeys{it.startsWith("nav:")}.values.any{it.hasFocus()}
+  if(sidebarExpanded==expanded)return
+  val first=sidebarExpanded==null;sidebarExpanded=expanded;sidebarAnimation?.cancel()
+  val start=sidebarPanel.layoutParams.width;val end=p(if(expanded)244 else 104)
   sidebarNames.forEachIndexed{i,label->(focusViews["nav:$i"] as? TextView)?.let{v->
    v.text=if(expanded)label else "";v.compoundDrawablePadding=if(expanded)p(14)else 0
-   v.setPadding(p(if(expanded)16 else 17),p(8),p(12),p(8))
-   val lp=v.layoutParams as FrameLayout.LayoutParams;val width=p(if(expanded)180 else 64);if(lp.width!=width){lp.width=width;v.layoutParams=lp}
+   v.setPadding(p(17),p(8),p(12),p(8));v.bringToFront()
   }}
+  fun frame(width:Int){val lp=sidebarPanel.layoutParams;lp.width=width;sidebarPanel.layoutParams=lp
+   val amount=((width-p(104)).toFloat()/p(140).coerceAtLeast(1)).coerceIn(0f,1f)
+   sidebarNames.indices.forEach{i->focusViews["nav:$i"]?.let{v->val n=v.layoutParams;n.width=(p(64)+(p(196)-p(64))*amount).toInt();v.layoutParams=n}}
+  }
+  val motion=Settings.Global.getFloat(contentResolver,Settings.Global.ANIMATOR_DURATION_SCALE,1f)>0f
+  if(first || !motion)frame(end) else sidebarAnimation=android.animation.ValueAnimator.ofInt(start,end).apply{duration=180;addUpdateListener{frame(it.animatedValue as Int)};start()}
  }
+ private fun contentPx(value:Int)=p(if(compactLayout)(value*1760f/1644f).toInt()else value)
  private lateinit var header:HomeWeatherView
  private lateinit var clock:TextView
  private var mediaHeading:TextView?=null
@@ -119,7 +130,7 @@ class HomeActivity:Activity() {
  }
  override fun onRequestPermissionsResult(code:Int,permissions:Array<out String>,results:IntArray){super.onRequestPermissionsResult(code,permissions,results);if(code==42 && page=="Home")showPage("Home")}
  override fun onNewIntent(intent:Intent) {super.onNewIntent(intent);setIntent(intent);if(intent.hasCategory(Intent.CATEGORY_HOME)){if(page!="Home")showPage("Home");refreshFeedOnReturn()}}
- override fun onResume() { super.onResume();handler.post(sidebarUpdate);feedActive=true;if(resumedOnce && page=="Home")updateHomePhotos();resumedOnce=true
+ override fun onResume() { super.onResume();if(compactLayout!=getSharedPreferences("home-ui",0).getBoolean("compactSidebar",false))showPage(page);handler.post(sidebarUpdate);feedActive=true;if(resumedOnce && page=="Home")updateHomePhotos();resumedOnce=true
   if(previewFiles==null && !observingFeed && Build.VERSION.SDK_INT>=26)try{contentResolver.registerContentObserver(android.media.tv.TvContract.WatchNextPrograms.CONTENT_URI,true,feedObserver);observingFeed=true}catch(_:Exception){}
   refreshFeedOnReturn();handler.removeCallbacks(feedPoll);handler.postDelayed(feedPoll,60000)
   handler.removeCallbacks(tick);handler.post(tick);if(previewFiles==null)WeatherStore.refresh(applicationContext)
@@ -133,13 +144,13 @@ class HomeActivity:Activity() {
  override fun onLowMemory(){super.onLowMemory();PlexFeed.trimArtwork()}
  override fun onDestroy() { unregisterReceiver(homePress);epoch++;handler.removeCallbacksAndMessages(null);worker.shutdownNow();feedWorker.shutdownNow();if(::root.isInitialized)clearPage();super.onDestroy() }
  private fun clearPage() {
-  epoch++;mediaEpoch++;focusViews.clear();photoSlots.clear();mediaSignature=""
+  sidebarAnimation?.cancel();sidebarExpanded=null;epoch++;mediaEpoch++;focusViews.clear();photoSlots.clear();mediaSignature=""
   mediaBitmaps.forEach{if(!it.isRecycled)it.recycle()};mediaBitmaps.clear()
   fun detach(view:View){if(view is OrientationPhotoView)view.clear();if(view is ImageView)view.setImageDrawable(null);if(view is android.view.ViewGroup)for(i in 0 until view.childCount)detach(view.getChildAt(i))}
   detach(root);root.removeAllViews();bitmaps.forEach {if(!it.isRecycled)it.recycle()};bitmaps.clear()
  }
  private fun p(v:Int)=(v*scale).toInt()
- private fun place(view:View,x:Int,y:Int,w:Int,h:Int) { root.addView(view,FrameLayout.LayoutParams(p(w),p(h)).apply { leftMargin=p(x);topMargin=p(y) }) }
+ private fun place(view:View,x:Int,y:Int,w:Int,h:Int) { val content=x>=244;root.addView(view,FrameLayout.LayoutParams(if(content)contentPx(w)else p(w),p(h)).apply { leftMargin=if(content && compactLayout)p(128)+contentPx(x-244)else p(x);topMargin=p(y) }) }
  private fun text(value:String,size:Int=30):TextView=TextView(this).apply { text=value;setTextSize(TypedValue.COMPLEX_UNIT_PX,size*scale);setTextColor(titleColor);gravity=Gravity.CENTER_VERTICAL }
  private fun tile(label:String,action:()->Unit):TextView=text(label,26).apply {
   id=nextId++;isFocusable=true;isFocusableInTouchMode=true;isClickable=true;setPadding(p(20),p(10),p(16),p(10));contentDescription=label
@@ -158,7 +169,7 @@ class HomeActivity:Activity() {
  }
  private fun showPage(name:String) {
   if(name!=page && name in listOf("Movies","TV Shows","Anime")){catalogPageIndex=0;catalogFocusAfterLoad=null}
-  page=name;clearPage()
+  compactLayout=getSharedPreferences("home-ui",0).getBoolean("compactSidebar",false);page=name;clearPage()
   backdrop=HomeBackdropView(this);place(backdrop,0,0,1920,1080)
   header=HomeWeatherView(this);place(header,244,38,600,110)
   clock=text("",38).apply { gravity=Gravity.RIGHT or Gravity.CENTER_VERTICAL };place(clock,1430,52,430,90);updateHeader()
@@ -196,6 +207,8 @@ class HomeActivity:Activity() {
    "Search"->searchPage()
    "Settings"->settingsPage()
   }
+  sidebarPanel=View(this).apply{elevation=p(8).toFloat();isClickable=true;setBackgroundColor(Color.argb(232,3,13,25));importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO};place(sidebarPanel,0,0,104,1080)
+  focusViews.filterKeys{it.startsWith("nav:")}.values.forEach{it.elevation=p(9).toFloat();it.bringToFront()}
   (first ?: focusViews[if(name=="TV")"nav:7"else"nav:0"])?.requestFocus();updateSidebar()
  }
  private fun heading(value:String) { place(text(value,46).apply{typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)},244,174,1500,65) }
@@ -389,7 +402,7 @@ class HomeActivity:Activity() {
    val label=info.loadLabel(packageManager).toString()
    val view=tile(label){launchPackage(info.activityInfo.packageName)}.apply{maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END;setTextSize(TypedValue.COMPLEX_UNIT_PX,22*scale)}
    try{val icon=info.loadIcon(packageManager);icon.setBounds(0,0,p(48),p(48));view.setCompoundDrawables(icon,null,null,null);view.compoundDrawablePadding=p(18)}catch(_:Exception){view.text=label.take(1)+"  "+label}
-   controls.add(view);row.addView(view,LinearLayout.LayoutParams(p(396),p(114)).apply{setMargins(0,0,p(20),p(22))})
+   controls.add(view);row.addView(view,LinearLayout.LayoutParams(contentPx(396),p(114)).apply{setMargins(0,0,contentPx(20),p(22))})
   };rows.addView(row)}
   place(scroll,244,306,1648,710);wireGrid(controls,4)
  }
@@ -520,7 +533,7 @@ class HomeActivity:Activity() {
   fun detach(v:View){if(v is ImageView)v.setImageDrawable(null);if(v is ViewGroup)for(i in 0 until v.childCount)detach(v.getChildAt(i))}
   detach(mediaHost);mediaHost.removeAllViews();mediaBitmaps.forEach{if(!it.isRecycled)it.recycle()};mediaBitmaps.clear();focusViews.keys.filter{it.startsWith("media:")}.toList().forEach{focusViews.remove(it)}
   mediaHeading?.text="Continue Watching  ›"
-  fun placeCard(card:View,i:Int){focusViews["media:$i"]=card;mediaHost.addView(card,FrameLayout.LayoutParams(p(HomeLayout.MEDIA_W),p(HomeLayout.MEDIA_H)).apply{leftMargin=p(i*333)})}
+  fun placeCard(card:View,i:Int){focusViews["media:$i"]=card;mediaHost.addView(card,FrameLayout.LayoutParams(contentPx(HomeLayout.MEDIA_W),p(HomeLayout.MEDIA_H)).apply{leftMargin=contentPx(i*333)})}
   if(items.isEmpty()) {
    val message=if(signature=="loading")"Loading Continue Watching…" else "No continue watching items available. Open Plex or YouTube below."
    mediaHost.addView(text(message,27).apply{setTextColor(Color.rgb(185,204,218));contentDescription=message},FrameLayout.LayoutParams(-1,p(90)).apply{topMargin=p(30)})

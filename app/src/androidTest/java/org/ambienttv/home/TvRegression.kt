@@ -30,8 +30,9 @@ class TvRegression:Instrumentation(){
    check(w>=1280 && height>=720);val directory=File(c.filesDir,"regression").apply{mkdirs()}
    fun capture(name:String){main{val content=h.findViewById<android.view.ViewGroup>(android.R.id.content).getChildAt(0);val image=Bitmap.createBitmap(w,height,Bitmap.Config.ARGB_8888);content.draw(Canvas(image));File(directory,"$name.png").outputStream().use{image.compress(Bitmap.CompressFormat.PNG,100,it)};image.recycle()}}
    c.getSharedPreferences("home-ui",0).edit().putBoolean("compactSidebar",true).commit()
+   main{h.showPageForTest("Home")};waitFor{h.readyForTest() && h.photoReadyForTest()}
    stage="directional navigation"
-   main{h.focusForTest("nav:0")};waitFor{h.sidebarExpandedForTest()};capture("sidebar-expanded");var photoBounds=android.graphics.Rect();main{photoBounds=h.boundsForTest().getValue("photo:0")};sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_RIGHT);waitForIdleSync();waitFor{h.focusKeyForTest()=="photo:0" && !h.sidebarExpandedForTest()};main{check(h.boundsForTest().getValue("photo:0")==photoBounds)};capture("sidebar-compact")
+   main{h.focusForTest("nav:0")};waitFor{h.sidebarExpandedForTest()};SystemClock.sleep(250);capture("sidebar-expanded");var photoBounds=android.graphics.Rect();main{photoBounds=h.boundsForTest().getValue("photo:0");check(photoBounds.left < w*0.08f)};sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_RIGHT);waitForIdleSync();waitFor{h.focusKeyForTest()=="photo:0" && !h.sidebarExpandedForTest()};main{check(h.boundsForTest().getValue("photo:0")==photoBounds)};SystemClock.sleep(250);capture("sidebar-compact")
    sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_DOWN);waitForIdleSync();waitFor{h.focusKeyForTest()=="heading:1"}
    sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_DOWN);waitForIdleSync();waitFor{h.focusKeyForTest()=="footer:0"}
    for(i in 1..4){sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_RIGHT);waitForIdleSync();waitFor{h.focusKeyForTest()=="footer:$i"}}

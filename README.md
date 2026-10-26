@@ -35,6 +35,10 @@ photo upload or API key is required. Your existing services may have their own t
 views on an emulator. They contain no personal photos or account history. Weather
 and media accounts are not connected. They are not photographs of a household TV.*
 
+## New in 0.2.2
+
+Compact mode now gives the content the space beside the narrow rail. Navigation expands over it with a translucent navy panel and a short transition; photos and controls stay fixed. Android’s disabled-animation preference is respected.
+
 ## New in 0.2.1
 
 - More breathing room between the sidebar and content.
