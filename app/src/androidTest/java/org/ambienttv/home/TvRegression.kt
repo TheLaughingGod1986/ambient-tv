@@ -17,7 +17,7 @@ class TvRegression:Instrumentation(){
  private fun main(action:()->Unit){var failure:Throwable?=null;runOnMainSync{try{action()}catch(e:Throwable){failure=e}};failure?.let{throw it}}
  override fun onCreate(args:Bundle?){super.onCreate(args);start()}
  override fun onStart(){
-  var stage="startup";val report=JSONObject();var home:HomeActivity?=null
+  var stage="startup";val oldCompact=targetContext.getSharedPreferences("home-ui",0).getBoolean("compactSidebar",false);val report=JSONObject();var home:HomeActivity?=null
   try{
    check(android.os.Build.FINGERPRINT.contains("generic") || android.os.Build.MODEL.contains("sdk"))
    val c=targetContext;check(Vault(c).read()==null && PlexApi.vault(c).read()==null)
@@ -29,8 +29,9 @@ class TvRegression:Instrumentation(){
    val w=h.resources.displayMetrics.widthPixels;val height=h.resources.displayMetrics.heightPixels
    check(w>=1280 && height>=720);val directory=File(c.filesDir,"regression").apply{mkdirs()}
    fun capture(name:String){main{val content=h.findViewById<android.view.ViewGroup>(android.R.id.content).getChildAt(0);val image=Bitmap.createBitmap(w,height,Bitmap.Config.ARGB_8888);content.draw(Canvas(image));File(directory,"$name.png").outputStream().use{image.compress(Bitmap.CompressFormat.PNG,100,it)};image.recycle()}}
+   c.getSharedPreferences("home-ui",0).edit().putBoolean("compactSidebar",true).commit()
    stage="directional navigation"
-   main{h.focusForTest("nav:0")};sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_RIGHT);waitForIdleSync();waitFor{h.focusKeyForTest()=="photo:0"}
+   main{h.focusForTest("nav:0")};waitFor{h.sidebarExpandedForTest()};capture("sidebar-expanded");var photoBounds=android.graphics.Rect();main{photoBounds=h.boundsForTest().getValue("photo:0")};sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_RIGHT);waitForIdleSync();waitFor{h.focusKeyForTest()=="photo:0" && !h.sidebarExpandedForTest()};main{check(h.boundsForTest().getValue("photo:0")==photoBounds)};capture("sidebar-compact")
    sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_DOWN);waitForIdleSync();waitFor{h.focusKeyForTest()=="heading:1"}
    sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_DOWN);waitForIdleSync();waitFor{h.focusKeyForTest()=="footer:0"}
    for(i in 1..4){sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_RIGHT);waitForIdleSync();waitFor{h.focusKeyForTest()=="footer:$i"}}
@@ -55,9 +56,9 @@ class TvRegression:Instrumentation(){
    stage="dream back";sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
    waitFor{!c.getSharedPreferences("dream-state",0).getBoolean("active",true)}
    main{check(h.pageForTest()=="Home")}
-   report.put("passed",true).put("width",w).put("height",height).put("pages",8).put("directionalNavigation",true).put("enterAndBack",true).put("backupRoundTrip",true).put("dreamBack",true)
+   report.put("passed",true).put("width",w).put("height",height).put("pages",8).put("compactSidebar",true).put("contentDoesNotMove",true).put("directionalNavigation",true).put("enterAndBack",true).put("backupRoundTrip",true).put("dreamBack",true)
   }catch(e:Throwable){report.put("passed",false).put("error",stage+": "+e.javaClass.simpleName+": "+e.message)}
-  finally{HomeActivity.previewFiles=null;HomeActivity.previewWeather=null;HomeActivity.previewResolution=null;home?.let{main{it.finish()}}}
+  finally{targetContext.getSharedPreferences("home-ui",0).edit().putBoolean("compactSidebar",oldCompact).commit();HomeActivity.previewFiles=null;HomeActivity.previewWeather=null;HomeActivity.previewResolution=null;home?.let{main{it.finish()}}}
   File(targetContext.filesDir,"regression.json").writeText(report.toString(2));finish(if(report.optBoolean("passed"))Activity.RESULT_OK else Activity.RESULT_CANCELED,Bundle().apply{putString("regression",report.toString())})
  }
 }

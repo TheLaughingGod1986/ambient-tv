@@ -35,6 +35,11 @@ photo upload or API key is required. Your existing services may have their own t
 views on an emulator. They contain no personal photos or account history. Weather
 and media accounts are not connected. They are not photographs of a household TV.*
 
+## New in 0.2.1
+
+- More breathing room between the sidebar and content.
+- Optional compact sidebar: labels appear on focus, with no content reflow. Enable it in Settings → Status & backup. Labelled navigation remains the default.
+
 ## New in 0.2
 
 - Source status distinguishes a successful Home refresh from stale YouTube-published records.

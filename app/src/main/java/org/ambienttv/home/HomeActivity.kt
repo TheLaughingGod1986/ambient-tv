@@ -25,6 +25,7 @@ class HomeActivity:Activity() {
  private fun photoFiles()=previewFiles ?: Photos.currentFiles(this)
  internal fun pageForTest()=page
  internal fun focusForTest(key:String){check(focusViews[key]?.requestFocus()==true)}
+ internal fun sidebarExpandedForTest()=backdrop.sidebarExpanded
  internal fun focusKeyForTest()=focusViews.entries.firstOrNull{it.value.hasFocus()}?.key
  internal fun feedSnapshotForTest()=displayedWatchItems.toList()
  internal fun feedObservingForTest()=observingFeed
@@ -78,6 +79,20 @@ class HomeActivity:Activity() {
    }
   }
  }
+ private lateinit var backdrop:HomeBackdropView
+ private val sidebarNames=listOf("Home","TV Shows","Movies","Anime","Apps","Photos","Search","Settings")
+ private val sidebarUpdate=Runnable{updateSidebar()}
+ private fun updateSidebar(){
+  if(!::backdrop.isInitialized)return
+  val compact=getSharedPreferences("home-ui",0).getBoolean("compactSidebar",false)
+  val expanded=!compact || focusViews.filterKeys{it.startsWith("nav:")}.values.any{it.hasFocus()}
+  backdrop.sidebarExpanded=expanded
+  sidebarNames.forEachIndexed{i,label->(focusViews["nav:$i"] as? TextView)?.let{v->
+   v.text=if(expanded)label else "";v.compoundDrawablePadding=if(expanded)p(14)else 0
+   v.setPadding(p(if(expanded)16 else 17),p(8),p(12),p(8))
+   val lp=v.layoutParams as FrameLayout.LayoutParams;val width=p(if(expanded)180 else 64);if(lp.width!=width){lp.width=width;v.layoutParams=lp}
+  }}
+ }
  private lateinit var header:HomeWeatherView
  private lateinit var clock:TextView
  private var mediaHeading:TextView?=null
@@ -92,7 +107,7 @@ class HomeActivity:Activity() {
   val size=previewResolution ?: (resources.displayMetrics.widthPixels to resources.displayMetrics.heightPixels)
   scale=HomeLayout.scale(size.first,size.second)
   root=FrameLayout(this).apply { background=GradientDrawable(GradientDrawable.Orientation.TL_BR,intArrayOf(Color.rgb(4,14,24),Color.rgb(10,30,44),Color.rgb(5,15,24))) }
-  setContentView(root);showPage("Home")
+  setContentView(root);root.viewTreeObserver.addOnGlobalFocusChangeListener{_,_->handler.removeCallbacks(sidebarUpdate);handler.post(sidebarUpdate)};showPage("Home")
   registerHomePress()
   if(previewFiles==null && Build.VERSION.SDK_INT>=23 && checkSelfPermission("android.permission.READ_TV_LISTINGS")!=android.content.pm.PackageManager.PERMISSION_GRANTED)requestPermissions(arrayOf("android.permission.READ_TV_LISTINGS"),42)
  }
@@ -104,7 +119,7 @@ class HomeActivity:Activity() {
  }
  override fun onRequestPermissionsResult(code:Int,permissions:Array<out String>,results:IntArray){super.onRequestPermissionsResult(code,permissions,results);if(code==42 && page=="Home")showPage("Home")}
  override fun onNewIntent(intent:Intent) {super.onNewIntent(intent);setIntent(intent);if(intent.hasCategory(Intent.CATEGORY_HOME)){if(page!="Home")showPage("Home");refreshFeedOnReturn()}}
- override fun onResume() { super.onResume();feedActive=true;if(resumedOnce && page=="Home")updateHomePhotos();resumedOnce=true
+ override fun onResume() { super.onResume();handler.post(sidebarUpdate);feedActive=true;if(resumedOnce && page=="Home")updateHomePhotos();resumedOnce=true
   if(previewFiles==null && !observingFeed && Build.VERSION.SDK_INT>=26)try{contentResolver.registerContentObserver(android.media.tv.TvContract.WatchNextPrograms.CONTENT_URI,true,feedObserver);observingFeed=true}catch(_:Exception){}
   refreshFeedOnReturn();handler.removeCallbacks(feedPoll);handler.postDelayed(feedPoll,60000)
   handler.removeCallbacks(tick);handler.post(tick);if(previewFiles==null)WeatherStore.refresh(applicationContext)
@@ -144,15 +159,15 @@ class HomeActivity:Activity() {
  private fun showPage(name:String) {
   if(name!=page && name in listOf("Movies","TV Shows","Anime")){catalogPageIndex=0;catalogFocusAfterLoad=null}
   page=name;clearPage()
-  place(HomeBackdropView(this),0,0,1920,1080)
+  backdrop=HomeBackdropView(this);place(backdrop,0,0,1920,1080)
   header=HomeWeatherView(this);place(header,244,38,600,110)
   clock=text("",38).apply { gravity=Gravity.RIGHT or Gravity.CENTER_VERTICAL };place(clock,1430,52,430,90);updateHeader()
-  val names=listOf("Home","TV Shows","Movies","Anime","Apps","Photos","Search","Settings")
+  val names=sidebarNames
   var first:View?=null
   names.forEachIndexed { index,label ->
    val nav=tile(label) { when(label) { else->showPage(label) } }
    val icon=HomeNavIcon(when(label){"TV Shows"->"TV";"Anime"->"Movies";else->label});icon.setBounds(0,0,p(30),p(30));icon.setTint(titleColor)
-   nav.setTextSize(TypedValue.COMPLEX_UNIT_PX,22*scale);nav.setPadding(p(12),p(8),p(12),p(8));nav.compoundDrawablePadding=p(12);nav.setCompoundDrawables(icon,null,null,null)
+   nav.setTextSize(TypedValue.COMPLEX_UNIT_PX,22*scale);nav.setPadding(p(16),p(8),p(12),p(8));nav.compoundDrawablePadding=p(14);nav.setCompoundDrawables(icon,null,null,null)
    nav.background=if(label==name)rounded(Color.rgb(228,239,248),false)else android.graphics.drawable.ColorDrawable(Color.TRANSPARENT);nav.setTextColor(if(label==name)Color.rgb(9,22,36)else titleColor);icon.setTint(if(label==name)Color.rgb(9,22,36)else titleColor)
    nav.setOnFocusChangeListener {_,focused->val active=focused || label==name;nav.background=if(active)rounded(Color.rgb(228,239,248),focused)else android.graphics.drawable.ColorDrawable(Color.TRANSPARENT);nav.setTextColor(if(active)Color.rgb(9,22,36)else titleColor);icon.setTint(if(active)Color.rgb(9,22,36)else titleColor)}
    focusViews["nav:$index"]=nav
@@ -181,7 +196,7 @@ class HomeActivity:Activity() {
    "Search"->searchPage()
    "Settings"->settingsPage()
   }
-  (first ?: focusViews[if(name=="TV")"nav:7"else"nav:0"])?.requestFocus()
+  (first ?: focusViews[if(name=="TV")"nav:7"else"nav:0"])?.requestFocus();updateSidebar()
  }
  private fun heading(value:String) { place(text(value,46).apply{typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)},244,174,1500,65) }
  private fun updateHeader() {
