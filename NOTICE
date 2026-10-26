@@ -1,0 +1,19 @@
+Ambient TV
+Copyright 2026 Ambient TV contributors
+
+The api module contains the Projectivy wallpaper provider API from
+https://github.com/spocky/projectivy-plugin-wallpaper-provider
+Source snapshot: 60ec7b4306ab16dac83ea10ed9b81f5670b51ee3
+Licensed under the Apache License, Version 2.0. The module build file is adapted.
+The Gradle wrapper is distributed under the Apache License, Version 2.0.
+
+Bundled demo photographs and the mountain backdrop are AI-generated scenery.
+They do not depict the original project's household or photo collection.
+See docs/ASSETS.md for provenance and screenshot reproduction.
+
+Weather data, when enabled, is provided by Open-Meteo under CC BY 4.0.
+https://open-meteo.com/  https://creativecommons.org/licenses/by/4.0/
+Temperatures are rounded and condition labels are shortened for display.
+
+Android, Google TV, YouTube, Plex, Synology and Projectivy belong to their
+respective owners. Ambient TV is an independent project, not endorsed by them.

@@ -1,0 +1,1 @@
+<resources><string name="home_bridge_description">Opens Ambient TV only when the original TV launcher is in front. Checks the window package name; does not read or store screen text.</string></resources>

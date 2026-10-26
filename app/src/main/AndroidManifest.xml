@@ -1,0 +1,37 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+ <uses-permission android:name="android.permission.INTERNET"/>
+ <uses-permission android:name="android.permission.READ_TV_LISTINGS"/>
+ <uses-permission android:name="com.android.providers.tv.permission.READ_EPG_DATA"/>
+ <uses-feature android:name="android.hardware.touchscreen" android:required="false"/>
+ <uses-feature android:name="android.software.leanback" android:required="true"/>
+ <queries><package android:name="com.spocky.projengmenu"/><intent><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LEANBACK_LAUNCHER"/></intent></queries>
+ <application android:name=".FamilyApplication" android:banner="@drawable/banner" android:icon="@drawable/icon" android:label="Ambient TV Photos" android:theme="@android:style/Theme.Material.NoActionBar" android:allowBackup="false" android:usesCleartextTraffic="true">
+  <activity android:name=".HomeActivity" android:exported="true" android:label="Ambient TV" android:launchMode="singleTask">
+   <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.HOME"/><category android:name="android.intent.category.DEFAULT"/></intent-filter>
+  </activity>
+  <activity android:name=".PlexConnectActivity" android:exported="true" android:label="Connect Plex"/>
+  <activity android:name=".PhotoViewerActivity" android:exported="false"/>
+  <activity android:name=".SettingsActivity" android:exported="true">
+   <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LEANBACK_LAUNCHER"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+  </activity>
+  <service android:name=".WallpaperService" android:exported="true" android:label="Ambient TV Photos">
+   <intent-filter><action android:name="tv.projectivy.plugin.WALLPAPER_PROVIDER"/></intent-filter>
+   <meta-data android:name="apiVersion" android:value="1"/>
+   <meta-data android:name="uuid" android:value="d170c0ec-f8a8-434d-9c5d-8090a556b827"/>
+   <meta-data android:name="name" android:value="Ambient TV Photos"/>
+   <meta-data android:name="settingsActivity" android:value=".SettingsActivity"/>
+   <meta-data android:name="itemsCacheDurationMillis" android:value="60000"/>
+   <meta-data android:name="updateMode" android:value="1"/>
+  </service>
+  <activity android:name=".DreamSettingsActivity" android:exported="true" android:label="Photo screensaver settings"/>
+  <service android:name=".PhotoDreamService" android:label="Ambient TV screensaver" android:exported="true" android:permission="android.permission.BIND_DREAM_SERVICE">
+   <intent-filter><action android:name="android.service.dreams.DreamService"/><category android:name="android.intent.category.DEFAULT"/></intent-filter>
+   <meta-data android:name="android.service.dream" android:resource="@xml/photo_dream"/>
+  </service>
+  <service android:name=".HomeBridgeService" android:label="Ambient TV button" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE" android:exported="true">
+   <intent-filter><action android:name="android.accessibilityservice.AccessibilityService"/></intent-filter>
+   <meta-data android:name="android.accessibilityservice" android:resource="@xml/home_bridge"/>
+  </service>
+  <provider android:name=".PhotoProvider" android:authorities="org.ambienttv.home.photos" android:exported="true" android:grantUriPermissions="false"/>
+ </application>
+</manifest>

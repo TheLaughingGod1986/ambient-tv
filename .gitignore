@@ -1,0 +1,31 @@
+# Local build tools and IDE state
+.gradle/
+**/build/
+.idea/
+*.iml
+local.properties
+.DS_Store
+# Accounts, signing material and local configuration
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
+*.p12
+*.pem
+*.key
+keystore.properties
+secrets.properties
+# Device recordings, logs, backups and personal photos
+private/
+captures/
+backups/
+*.log
+*.apk
+*.aab
+*.apks
+*.zip
+*.tar
+*.db
+*.sqlite*
+__pycache__/
