@@ -2,6 +2,7 @@
 """Check publishable paths and common leaks. No network calls or secret values printed."""
 from pathlib import Path
 import re
+import hashlib
 import subprocess
 import sys
 
@@ -46,6 +47,8 @@ def main():
         if path.suffix == '.jar':
             if name != 'gradle/wrapper/gradle-wrapper.jar':
                 findings.append((name, 'unexpected archive'))
+            elif hashlib.sha256(data).hexdigest() != '498495120a03b9a6ab5d155f5de3c8f0d986a449153702fb80fc80e134484f17':
+                findings.append((name, 'wrapper differs from the official Gradle 8.9 JAR'))
             continue
         if path.suffix.lower() in {'.jpg', '.png'}:
             if b'Exif\0\0' in data or b'<x:xmpmeta' in data or b'eXIf' in data:
@@ -64,6 +67,8 @@ def main():
         except UnicodeDecodeError:
             findings.append((name, 'unexpected binary'))
             continue
+        if name == 'gradle/wrapper/gradle-wrapper.properties' and not re.search(rb'^distributionSha256Sum=[0-9a-f]{64}$', data, re.M):
+            findings.append((name, 'distribution checksum must be exactly 64 hex characters'))
         for label, pattern in PATTERNS.items():
             # This checker contains deliberately literal examples of its own patterns.
             if name != 'scripts/check-public.py' and pattern.search(data):
