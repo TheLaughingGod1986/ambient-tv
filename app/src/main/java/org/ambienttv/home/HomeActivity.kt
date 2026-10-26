@@ -92,19 +92,19 @@ class HomeActivity:Activity() {
   if(sidebarExpanded==expanded)return
   val first=sidebarExpanded==null;sidebarExpanded=expanded;sidebarAnimation?.cancel()
   val fullWidth=if(compactLayout)244 else 220;val navWidth=if(compactLayout)196 else 180
-  val start=sidebarPanel.layoutParams.width;val end=p(if(expanded)fullWidth else 104)
+  val start=sidebarPanel.layoutParams.width;val end=p(if(expanded)fullWidth else 96)
   sidebarNames.forEachIndexed{i,label->(focusViews["nav:$i"] as? TextView)?.let{v->
    v.text=if(expanded)label else "";v.compoundDrawablePadding=if(expanded)p(14)else 0
    v.setPadding(p(17),p(8),p(12),p(8));v.bringToFront()
   }}
   fun frame(width:Int){val lp=sidebarPanel.layoutParams;lp.width=width;sidebarPanel.layoutParams=lp
-   val amount=((width-p(104)).toFloat()/p(fullWidth-104).coerceAtLeast(1)).coerceIn(0f,1f)
+   val amount=((width-p(96)).toFloat()/p(fullWidth-96).coerceAtLeast(1)).coerceIn(0f,1f)
    sidebarNames.indices.forEach{i->focusViews["nav:$i"]?.let{v->val n=v.layoutParams;n.width=(p(64)+(p(navWidth)-p(64))*amount).toInt();v.layoutParams=n}}
   }
   val motion=Settings.Global.getFloat(contentResolver,Settings.Global.ANIMATOR_DURATION_SCALE,1f)>0f
   if(first || !motion)frame(end) else sidebarAnimation=android.animation.ValueAnimator.ofInt(start,end).apply{duration=180;addUpdateListener{frame(it.animatedValue as Int)};start()}
  }
- private fun contentPx(value:Int)=p(if(compactLayout)(value*1736f/1644f).toInt()else value)
+ private fun contentPx(value:Int)=p(if(compactLayout)(value*1720f/1644f).toInt()else value)
  private lateinit var header:HomeWeatherView
  private lateinit var clock:TextView
  private var mediaHeading:TextView?=null
@@ -151,7 +151,7 @@ class HomeActivity:Activity() {
   detach(root);root.removeAllViews();bitmaps.forEach {if(!it.isRecycled)it.recycle()};bitmaps.clear()
  }
  private fun p(v:Int)=(v*scale).toInt()
- private fun place(view:View,x:Int,y:Int,w:Int,h:Int) { val content=x>=244;root.addView(view,FrameLayout.LayoutParams(if(content)contentPx(w)else p(w),p(h)).apply { leftMargin=if(content && compactLayout)p(152)+contentPx(x-244)else p(x);topMargin=p(y) }) }
+ private fun place(view:View,x:Int,y:Int,w:Int,h:Int) { val content=x>=244;root.addView(view,FrameLayout.LayoutParams(if(content)contentPx(w)else p(w),p(h)).apply { leftMargin=if(content && compactLayout)p(168)+contentPx(x-244)else p(x);topMargin=p(y) }) }
  private fun text(value:String,size:Int=30):TextView=TextView(this).apply { text=value;setTextSize(TypedValue.COMPLEX_UNIT_PX,size*scale);setTextColor(titleColor);gravity=Gravity.CENTER_VERTICAL }
  private fun tile(label:String,action:()->Unit):TextView=text(label,26).apply {
   id=nextId++;isFocusable=true;isFocusableInTouchMode=true;isClickable=true;setPadding(p(20),p(10),p(16),p(10));contentDescription=label
@@ -208,7 +208,7 @@ class HomeActivity:Activity() {
    "Search"->searchPage()
    "Settings"->settingsPage()
   }
-  sidebarPanel=View(this).apply{elevation=p(8).toFloat();isClickable=true;setBackgroundColor(Color.argb(232,3,13,25));importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO};place(sidebarPanel,0,0,104,1080)
+  sidebarPanel=View(this).apply{elevation=p(8).toFloat();isClickable=true;setBackgroundColor(Color.argb(232,3,13,25));importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO};place(sidebarPanel,0,0,96,1080)
   focusViews.filterKeys{it.startsWith("nav:")}.values.forEach{it.elevation=p(9).toFloat();it.bringToFront()}
   (first ?: focusViews[if(name=="TV")"nav:7"else"nav:0"])?.requestFocus();updateSidebar()
  }
