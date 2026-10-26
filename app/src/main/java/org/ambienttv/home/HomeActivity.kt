@@ -104,7 +104,7 @@ class HomeActivity:Activity() {
   val motion=Settings.Global.getFloat(contentResolver,Settings.Global.ANIMATOR_DURATION_SCALE,1f)>0f
   if(first || !motion)frame(end) else sidebarAnimation=android.animation.ValueAnimator.ofInt(start,end).apply{duration=180;addUpdateListener{frame(it.animatedValue as Int)};start()}
  }
- private fun contentPx(value:Int)=p(if(compactLayout)(value*1720f/1644f).toInt()else value)
+ private fun contentPx(value:Int)=p(if(compactLayout)(value*1760f/1644f).toInt()else value)
  private lateinit var header:HomeWeatherView
  private lateinit var clock:TextView
  private var mediaHeading:TextView?=null
@@ -151,7 +151,7 @@ class HomeActivity:Activity() {
   detach(root);root.removeAllViews();bitmaps.forEach {if(!it.isRecycled)it.recycle()};bitmaps.clear()
  }
  private fun p(v:Int)=(v*scale).toInt()
- private fun place(view:View,x:Int,y:Int,w:Int,h:Int) { val content=x>=244;root.addView(view,FrameLayout.LayoutParams(if(content)contentPx(w)else p(w),p(h)).apply { leftMargin=if(content && compactLayout)p(168)+contentPx(x-244)else p(x);topMargin=p(y) }) }
+ private fun place(view:View,x:Int,y:Int,w:Int,h:Int) { val content=x>=244;root.addView(view,FrameLayout.LayoutParams(if(content)contentPx(w)else p(w),p(h)).apply { leftMargin=if(content && compactLayout)p(128)+contentPx(x-244)else p(x);topMargin=p(y) }) }
  private fun text(value:String,size:Int=30):TextView=TextView(this).apply { text=value;setTextSize(TypedValue.COMPLEX_UNIT_PX,size*scale);setTextColor(titleColor);gravity=Gravity.CENTER_VERTICAL }
  private fun tile(label:String,action:()->Unit):TextView=text(label,26).apply {
   id=nextId++;isFocusable=true;isFocusableInTouchMode=true;isClickable=true;setPadding(p(20),p(10),p(16),p(10));contentDescription=label
@@ -162,7 +162,7 @@ class HomeActivity:Activity() {
  private fun rounded(color:Int,focus:Boolean)=GradientDrawable().apply { setColor(color);cornerRadius=14*scale;setStroke(p(if(focus)3 else 1),if(focus)Color.WHITE else Color.rgb(43,66,82)) }
  private fun photoOutline(focused:Boolean)=GradientDrawable().apply{
   setColor(Color.TRANSPARENT);cornerRadius=14*scale
-  setStroke(maxOf(1,p(if(focused)3 else 1)),if(focused)Color.rgb(255,226,173)else Color.argb(150,126,168,211))
+  setStroke(maxOf(1,p(if(focused)3 else 1)),if(focused)Color.WHITE else Color.argb(150,126,168,211))
  }
  private fun dockBackground(focused:Boolean)=GradientDrawable(GradientDrawable.Orientation.TL_BR,
   if(focused)intArrayOf(Color.rgb(235,244,253),Color.rgb(208,226,246))else intArrayOf(Color.rgb(25,61,105),Color.rgb(13,39,72))).apply{
