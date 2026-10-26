@@ -6,6 +6,9 @@ jobs:
   emulator:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      ANDROID_AVD_HOME: ${{ runner.temp }}/ambient-avd
+      ANDROID_USER_HOME: ${{ runner.temp }}/ambient-android
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -28,7 +31,9 @@ jobs:
         timeout-minutes: 7
         run: |
           trap 'cat /tmp/emulator.log 2>/dev/null || true' ERR
-          echo no | avdmanager create avd --name tv-test --package 'system-images;android-35;google_apis;x86_64'
+          mkdir -p "$ANDROID_AVD_HOME" "$ANDROID_USER_HOME"
+          echo no | avdmanager create avd --name tv-test --path "$ANDROID_AVD_HOME/tv-test.avd" --package 'system-images;android-35;google_apis;x86_64'
+          printf 'avd.ini.encoding=UTF-8\npath=%s\ntarget=android-35\n' "$ANDROID_AVD_HOME/tv-test.avd" > "$ANDROID_AVD_HOME/tv-test.ini"
           "$ANDROID_HOME/emulator/emulator" -avd tv-test -no-window -no-audio -no-snapshot -no-boot-anim -no-metrics -memory 2048 -cores 2 -gpu swiftshader_indirect -feature -Vulkan > /tmp/emulator.log 2>&1 &
           timeout 120 adb wait-for-device
           timeout 300 bash -c 'until adb shell getprop sys.boot_completed | grep -q 1; do sleep 2; done'
