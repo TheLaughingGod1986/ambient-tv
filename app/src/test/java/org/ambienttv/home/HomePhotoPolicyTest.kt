@@ -4,6 +4,22 @@ import org.junit.Test
 import java.time.Instant
 
 class HomePhotoPolicyTest {
+ @Test fun featuredPortraitPreservesPaddedFaceAndAspectRatio() {
+  for(face in listOf(FaceRegion(200f,80f,650f,600f),FaceRegion(100f,700f,700f,1200f))) {
+   val f=HomePhotoPolicy.featureFrame(900,1600,510,390,face)
+   val scale=f.width/900
+   assertEquals(900f/1600,f.width/f.height,.0001f)
+   assertTrue(f.left+face.left*scale>=0 && f.left+face.right*scale<=510)
+   assertTrue(f.top+face.top*scale>=0 && f.top+face.bottom*scale<=390)
+   assertTrue(scale<=390f/1600*1.181f)
+  }
+  assertEquals(HomePhotoPolicy.frame(900,1600,510,390),HomePhotoPolicy.featureFrame(900,1600,510,390,null))
+ }
+ @Test fun heroAndThreeCompanionsKeepTheOriginalRowBounds() {
+  assertTrue(HomeLayout.photoWidth(0)>HomeLayout.photoWidth(1)*1.4f)
+  assertEquals(HomeLayout.RIGHT,HomeLayout.photoX(3)+HomeLayout.photoWidth(3))
+  for(i in 1..3)assertEquals(20,HomeLayout.photoX(i)-HomeLayout.photoX(i-1)-HomeLayout.photoWidth(i-1))
+ }
  @Test fun portraitsSquareAndPanoramaKeepTheirEntireImage() {
   for((w,h) in listOf(900 to 1600,900 to 1200,900 to 900,3200 to 600)) {
    val f=HomePhotoPolicy.frame(w,h,396,366)

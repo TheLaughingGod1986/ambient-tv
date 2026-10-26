@@ -13,15 +13,18 @@ internal class ClippedPhotoCard(c:Context,private val radius:Float):FrameLayout(
 }
 
 /** Owns only decoded thumbnails. No network, face analysis, animation, or original downloads. */
-internal class OrientationPhotoView(c:Context):View(c) {
+internal class OrientationPhotoView(c:Context,private val homePolish:Boolean=false):View(c) {
  private val paint=Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+ private var face:FaceRegion?=null
+ private val warmth=ColorMatrixColorFilter(ColorMatrix().apply{setSaturation(1.04f);postConcat(ColorMatrix(floatArrayOf(1.025f,0f,0f,0f,2f,0f,1.01f,0f,0f,1f,0f,0f,.995f,0f,0f,0f,0f,0f,1f,0f)))})
  private var photo:Bitmap?=null
  private var fill:Bitmap?=null
  private val requests=PhotoRequestState()
  val requestVersion get()=requests.version
  val hasPhoto get()=photo!=null
  fun request(key:String?)=requests.request(key,hasPhoto)
- fun show(bitmap:Bitmap?,background:Bitmap?) {
+ fun show(bitmap:Bitmap?,background:Bitmap?,subject:FaceRegion?=null) {
+  face=subject
   requests.complete();photo?.recycle();fill?.recycle();photo=bitmap;fill=background;invalidate()
  }
  fun clear(){requests.clear();show(null,null)}
@@ -32,11 +35,12 @@ internal class OrientationPhotoView(c:Context):View(c) {
   fill?.let{blur->
    val scale=maxOf(width.toFloat()/blur.width,height.toFloat()/blur.height)
    val w=blur.width*scale;val h=blur.height*scale
-   paint.alpha=150;c.drawBitmap(blur,null,RectF((width-w)/2,(height-h)/2,(width+w)/2,(height+h)/2),paint);paint.alpha=255
-   c.drawColor(Color.argb(65,3,10,17))
+   paint.alpha=if(homePolish)105 else 150;c.drawBitmap(blur,null,RectF((width-w)/2,(height-h)/2,(width+w)/2,(height+h)/2),paint);paint.alpha=255
+   c.drawColor(Color.argb(if(homePolish)95 else 65,3,10,17))
   }
-  val frame=HomePhotoPolicy.frame(image.width,image.height,width.coerceAtLeast(1),height.coerceAtLeast(1))
-  c.drawBitmap(image,null,RectF(frame.left,frame.top,frame.left+frame.width,frame.top+frame.height),paint)
+  val frame=if(homePolish)HomePhotoPolicy.featureFrame(image.width,image.height,width.coerceAtLeast(1),height.coerceAtLeast(1),face)else HomePhotoPolicy.frame(image.width,image.height,width.coerceAtLeast(1),height.coerceAtLeast(1))
+  paint.colorFilter=if(homePolish)warmth else null
+  c.drawBitmap(image,null,RectF(frame.left,frame.top,frame.left+frame.width,frame.top+frame.height),paint);paint.colorFilter=null
  }
  companion object {
   /** Deliberately tiny soft fill, made on the existing image worker, never on the UI thread. */

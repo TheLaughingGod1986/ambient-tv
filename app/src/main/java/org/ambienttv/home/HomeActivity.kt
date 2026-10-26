@@ -235,17 +235,18 @@ class HomeActivity:Activity() {
    {showPage("Photos")},{galleryPage(true)},{showPage("Photos")})
   for(i in titles.indices) {
    val card=ClippedPhotoCard(this,14*scale).apply{id=nextId++;isFocusable=true;isFocusableInTouchMode=true;isClickable=true;background=rounded(Color.rgb(17,35,49),false);foreground=photoOutline(false);clipToOutline=true;contentDescription=titles[i];setOnClickListener{actions[i]()};setOnFocusChangeListener{_,focus->foreground=photoOutline(focus)}}
-   val image=OrientationPhotoView(this);card.addView(image,FrameLayout.LayoutParams(-1,-1))
+   card.elevation=p(if(i==0)6 else 4).toFloat()
+   val image=OrientationPhotoView(this,true);card.addView(image,FrameLayout.LayoutParams(-1,-1))
    val placeholder=ImageView(this).apply{setImageDrawable(HomeNavIcon(icons[i]).apply{setTint(Color.rgb(164,191,210))})};card.addView(placeholder,FrameLayout.LayoutParams(p(70),p(70),Gravity.CENTER).apply{bottomMargin=p(30)})
-   card.addView(View(this).apply{background=GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,intArrayOf(Color.TRANSPARENT,Color.argb(230,2,9,17)))},FrameLayout.LayoutParams(-1,p(150),Gravity.BOTTOM))
+   card.addView(View(this).apply{background=GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,intArrayOf(Color.TRANSPARENT,Color.argb(242,4,10,18)))},FrameLayout.LayoutParams(-1,p(170),Gravity.BOTTOM))
    val caption=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL;setPadding(p(20),0,p(16),p(16))}
    val icon=ImageView(this).apply{setImageDrawable(HomeNavIcon(icons[i]).apply{setTint(Color.WHITE)})};caption.addView(icon,LinearLayout.LayoutParams(p(30),p(30)).apply{rightMargin=p(12)})
    val words=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
-   words.addView(text(titles[i],26).apply{typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL);maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END})
-   val detail=text("",20).apply{setTextColor(Color.rgb(219,230,240));maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END};words.addView(detail)
+   words.addView(text(titles[i],if(i==0)30 else 28).apply{typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL);maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END})
+   val detail=text("",20).apply{setTextColor(Color.rgb(204,216,228));maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END};words.addView(detail)
    caption.addView(words,LinearLayout.LayoutParams(0,-2,1f));card.addView(caption,FrameLayout.LayoutParams(-1,p(94),Gravity.BOTTOM))
    photoSlots.add(PhotoSlot(image,detail,placeholder));focusViews["photo:$i"]=card
-   place(card,HomeLayout.LEFT+i*(HomeLayout.PHOTO_W+HomeLayout.GAP),HomeLayout.PHOTO_Y,HomeLayout.PHOTO_W,HomeLayout.PHOTO_H)
+   place(card,HomeLayout.photoX(i),HomeLayout.PHOTO_Y+if(i==0)0 else 12,HomeLayout.photoWidth(i),HomeLayout.PHOTO_H-if(i==0)0 else 24)
   }
   updateHomePhotos()
   mediaHeading=headingAction("Continue Watching  ›",HomeLayout.MEDIA_HEADING_Y,"heading:1"){showPage("Continue Watching")}
@@ -292,7 +293,8 @@ class HomeActivity:Activity() {
      val bitmap=try{PhotoDecoding.load(file,768,900)}catch(_:Exception){null}
      if(token!=epoch || slot.image.requestVersion!=request){bitmap?.recycle();return@execute}
      val fill=bitmap?.let{OrientationPhotoView.softFill(it)}
-     handler.post{if(token==epoch && slot.image.requestVersion==request && !isDestroyed){slot.image.show(bitmap,fill);slot.placeholder.visibility=if(bitmap==null)View.VISIBLE else View.GONE}else{bitmap?.recycle();fill?.recycle()}}
+     val face=bitmap?.let{HeroComposition.detect(it)}
+     handler.post{if(token==epoch && slot.image.requestVersion==request && !isDestroyed){slot.image.show(bitmap,fill,face);slot.placeholder.visibility=if(bitmap==null)View.VISIBLE else View.GONE}else{bitmap?.recycle();fill?.recycle()}}
     }
    }
   }

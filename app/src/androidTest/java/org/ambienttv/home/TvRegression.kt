@@ -32,7 +32,9 @@ class TvRegression:Instrumentation(){
    c.getSharedPreferences("home-ui",0).edit().putBoolean("compactSidebar",true).commit()
    main{h.showPageForTest("Home")};waitFor{h.readyForTest() && h.photoReadyForTest()}
    stage="directional navigation"
-   main{h.focusForTest("nav:0")};waitFor{h.sidebarExpandedForTest()};SystemClock.sleep(250);capture("sidebar-expanded");var photoBounds=android.graphics.Rect();main{photoBounds=h.boundsForTest().getValue("photo:0");check(kotlin.math.abs(photoBounds.left-w*128f/1920f)<2f)};sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_RIGHT);waitForIdleSync();waitFor{h.focusKeyForTest()=="photo:0" && !h.sidebarExpandedForTest()};main{check(h.boundsForTest().getValue("photo:0")==photoBounds)};SystemClock.sleep(250);capture("sidebar-compact")
+   main{h.focusForTest("nav:0")};waitFor{h.sidebarExpandedForTest()};SystemClock.sleep(250);capture("sidebar-expanded");var photoBounds=android.graphics.Rect();main{photoBounds=h.boundsForTest().getValue("photo:0");check(kotlin.math.abs(photoBounds.left-w*128f/1920f)<2f);check(photoBounds.width()>h.boundsForTest().getValue("photo:1").width()*1.4f)};sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_RIGHT);waitForIdleSync();waitFor{h.focusKeyForTest()=="photo:0" && !h.sidebarExpandedForTest()};main{check(h.boundsForTest().getValue("photo:0")==photoBounds)};SystemClock.sleep(250);capture("sidebar-compact")
+   for(i in 1..3){sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_RIGHT);waitForIdleSync();waitFor{h.focusKeyForTest()=="photo:$i"}}
+   for(i in 2 downTo 0){sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_LEFT);waitForIdleSync();waitFor{h.focusKeyForTest()=="photo:$i"}}
    sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_DOWN);waitForIdleSync();waitFor{h.focusKeyForTest()=="heading:1"}
    sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_DOWN);waitForIdleSync();waitFor{h.focusKeyForTest()=="footer:0"}
    for(i in 1..4){sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_RIGHT);waitForIdleSync();waitFor{h.focusKeyForTest()=="footer:$i"}}

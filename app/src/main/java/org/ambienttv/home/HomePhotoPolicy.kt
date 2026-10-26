@@ -17,6 +17,22 @@ object HomePhotoPolicy {
   val y=if(height<=targetH)(targetH-height)/2 else (targetH*.42f-focalY.coerceIn(0f,1f)*height).coerceIn(targetH-height,0f)
   return PhotoFrame(x,y,width,height)
  }
+ /** Small portrait zoom only when the padded face remains entirely visible; unknown/group shots stay whole. */
+ fun featureFrame(w:Int,h:Int,tw:Int,th:Int,face:FaceRegion?):PhotoFrame {
+  if(face==null || w.toFloat()/h>=1.1f)return frame(w,h,tw,th)
+  val fh=(face.bottom-face.top).coerceAtLeast(1f);val fw=(face.right-face.left).coerceAtLeast(1f)
+  val l=(face.left-fw*.3f).coerceAtLeast(0f);val r=(face.right+fw*.3f).coerceAtMost(w.toFloat())
+  val t=(face.top-fh*.65f).coerceAtLeast(0f);val b=(face.bottom+fh*.45f).coerceAtMost(h.toFloat())
+  val contain=min(tw.toFloat()/w,th.toFloat()/h)
+  val zoom=min(contain*1.18f,min(tw/(r-l),th/(b-t))).coerceAtLeast(contain)
+  val width=w*zoom;val height=h*zoom
+  fun offset(size:Float,target:Int,start:Float,end:Float,anchor:Float):Float {
+   if(size<=target)return (target-size)/2
+   val low=max(target-size,-start*zoom);val high=min(0f,target-end*zoom)
+   return if(low<=high)(target*anchor-(start+end)*.5f*zoom).coerceIn(low,high)else (target-size)/2
+  }
+  return PhotoFrame(offset(width,tw,l,r,.5f),offset(height,th,t,b,.42f),width,height)
+ }
  fun localDay(now:Long,zone:TimeZone=TimeZone.getDefault()):Long {
   val key=SimpleDateFormat("yyyy-MM-dd",Locale.ROOT).apply{timeZone=zone}.format(Date(now))
   val utc=SimpleDateFormat("yyyy-MM-dd",Locale.ROOT).apply{timeZone=TimeZone.getTimeZone("UTC")}.parse(key)!!.time
@@ -37,5 +53,7 @@ object HomePhotoPolicy {
 object HomeLayout {
  const val LEFT=244;const val RIGHT=1888;const val PHOTO_Y=244;const val PHOTO_W=396;const val PHOTO_H=390;const val GAP=20
  const val MEDIA_HEADING_Y=654;const val MEDIA_Y=724;const val MEDIA_W=312;const val MEDIA_H=184;const val DOCK_Y=936;const val DOCK_H=76
+ fun photoWidth(index:Int)=if(index==0)510 else 358
+ fun photoX(index:Int)=LEFT+if(index==0)0 else 530+(index-1)*378
  fun scale(width:Int,height:Int)=min(width/1920f,height/1080f)
 }
