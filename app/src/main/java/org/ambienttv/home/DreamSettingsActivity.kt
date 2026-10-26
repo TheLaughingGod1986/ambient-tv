@@ -19,7 +19,8 @@ class DreamSettingsActivity:Activity() {
   group.check(if(prefs.getString("style","hero")=="classic")101+prefs.getInt("columns",0).coerceIn(0,3) else 100)
   group.setOnCheckedChangeListener { _,id -> prefs.edit().putString("style",if(id==100)"hero" else "classic").putInt("columns",if(id==100)0 else id-101).apply() }
   root.addView(group)
+  root.addView(Button(this).apply{text="Default photo framing";setOnClickListener{PhotoFraming.choose(this@DreamSettingsActivity)}})
   root.addView(TextView(this).apply { text="Weather: open-meteo.com · CC BY 4.0\nhttps://open-meteo.com/ · https://creativecommons.org/licenses/by/4.0/\nTemperature rounded and conditions shortened. Cached photos continue when the NAS is unavailable.";textSize=16f;setTextColor(Color.LTGRAY);android.text.util.Linkify.addLinks(this,android.text.util.Linkify.WEB_URLS);movementMethod=android.text.method.LinkMovementMethod.getInstance() })
-  setContentView(root);group.findViewById<RadioButton>(group.checkedRadioButtonId).requestFocus()
+  setContentView(ScrollView(this).apply{addView(root)});group.findViewById<RadioButton>(group.checkedRadioButtonId).requestFocus()
  }
 }

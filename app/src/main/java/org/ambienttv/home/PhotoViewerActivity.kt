@@ -25,7 +25,9 @@ class PhotoViewerActivity:Activity() {
   val root=LinearLayout(this).apply {orientation=LinearLayout.VERTICAL;setBackgroundColor(Color.rgb(5,15,24))}
   image=ImageView(this).apply {scaleType=ImageView.ScaleType.FIT_CENTER};root.addView(image,LinearLayout.LayoutParams(-1,0,1f))
   caption=TextView(this).apply{setTextColor(Color.WHITE);gravity=android.view.Gravity.CENTER};root.addView(caption)
-  button=Button(this);root.addView(button);setContentView(root);button.requestFocus()
+  button=Button(this);root.addView(button)
+  root.addView(Button(this).apply{text="Photo framing for screensaver";setOnClickListener{PhotoFraming.choose(this@PhotoViewerActivity,files[index].name.substringAfter('-'))}})
+  setContentView(root);button.requestFocus()
   button.setOnClickListener {val key=files[index].name.substringAfter('-');val prefs=getSharedPreferences("favourites",0);val ids=(prefs.getStringSet("ids",emptySet()) ?: emptySet()).toMutableSet();if(!ids.add(key))ids.remove(key);prefs.edit().putStringSet("ids",ids).apply();refreshLabel()}
   showPhoto()
  }

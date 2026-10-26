@@ -5,7 +5,7 @@ case "${1:-}" in
   *) echo 'Usage: scripts/make-demo-screenshots.sh emulator-SERIAL (clean emulator only)' >&2; exit 2 ;;
 esac
 cd "$(dirname "$0")/.."
-./gradlew :app:assembleDebug :app:assembleDebugAndroidTest
+./gradlew :app:assembleDebug :app:assembleDebugAndroidTest -PtvTestRunner=org.ambienttv.home.DemoScreenshots
 adb -s "$1" install -r app/build/outputs/apk/debug/app-debug.apk
 adb -s "$1" install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 result_file=$(mktemp)

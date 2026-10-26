@@ -6,7 +6,7 @@
 
 A photo-first home screen and screensaver for Android TV, with optional Synology Photos, Plex and weather.
 
-[Get started](docs/SETUP.md) · [Copy a setup prompt](prompts/README.md) · [Troubleshooting](docs/TROUBLESHOOTING.md) · [Privacy](docs/PRIVACY.md)
+[Download releases](https://github.com/TheLaughingGod1986/ambient-tv/releases) · [Get started](docs/SETUP.md) · [Copy a setup prompt](prompts/README.md) · [Troubleshooting](docs/TROUBLESHOOTING.md) · [Privacy](docs/PRIVACY.md)
 
 ![Ambient TV Home with generated lake, coast and forest demo scenery](docs/images/home.png)
 
@@ -34,6 +34,13 @@ photo upload or API key is required. Your existing services may have their own t
 *These images are generated-scene demo renders from the Android app's production
 views on an emulator. They contain no personal photos or account history. Weather
 and media accounts are not connected. They are not photographs of a household TV.*
+
+## New in 0.2
+
+- Source status distinguishes a successful Home refresh from stale YouTube-published records.
+- Choose full-photo or cinematic framing, with optional saved per-photo adjustments.
+- Export and restore a credential-free preferences file.
+- Signed releases and automated TV navigation checks. See [updates and recovery](docs/RELEASES.md).
 
 ## Start here
 

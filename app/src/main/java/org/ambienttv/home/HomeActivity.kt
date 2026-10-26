@@ -24,6 +24,8 @@ class HomeActivity:Activity() {
  companion object {internal var previewFiles:List<File>?=null;internal var previewWeather:WeatherPanel?=null;internal var previewResolution:Pair<Int,Int>?=null}
  private fun photoFiles()=previewFiles ?: Photos.currentFiles(this)
  internal fun pageForTest()=page
+ internal fun focusForTest(key:String){check(focusViews[key]?.requestFocus()==true)}
+ internal fun focusKeyForTest()=focusViews.entries.firstOrNull{it.value.hasFocus()}?.key
  internal fun feedSnapshotForTest()=displayedWatchItems.toList()
  internal fun feedObservingForTest()=observingFeed
  internal fun showPageForTest(name:String)=showPage(name)
@@ -107,7 +109,7 @@ class HomeActivity:Activity() {
   refreshFeedOnReturn();handler.removeCallbacks(feedPoll);handler.postDelayed(feedPoll,60000)
   handler.removeCallbacks(tick);handler.post(tick);if(previewFiles==null)WeatherStore.refresh(applicationContext)
  }
- override fun onPause() {feedActive=false;feedState.pause();handler.removeCallbacks(feedRead);handler.removeCallbacks(feedPoll);handler.removeCallbacks(feedReturnRetry)
+ override fun onPause() {feedActive=false;feedState.pause();handler.removeCallbacks(feedRead);handler.removeCallbacks(feedPoll);handler.removeCallbacks(feedReturnRetry);handler.removeCallbacks(feedReturnFinalRetry)
   if(observingFeed){contentResolver.unregisterContentObserver(feedObserver);observingFeed=false};handler.removeCallbacks(tick);super.onPause() }
  override fun onTrimMemory(level:Int) {
   super.onTrimMemory(level)
@@ -389,7 +391,7 @@ class HomeActivity:Activity() {
   val groups=listOf(
    "TV & devices" to listOf(Triple("TV & inputs","Configure connected TV",{showPage("TV")}),Triple("Android settings","System settings",{safeStart(Intent(Settings.ACTION_SETTINGS))}),Triple("Android screensaver settings","Display and timeout",{safeStart(Intent(Settings.ACTION_DREAM_SETTINGS))})),
    "Connected services" to listOf(Triple("Connect Plex","Manage your media server",{safeStart(Intent(this,PlexConnectActivity::class.java))}),Triple("Open Projectivy","Launch your TV interface",{launchPackage("com.spocky.projengmenu")}),Triple("Photo connection settings","Synology and album access",{safeStart(Intent(this,SettingsActivity::class.java))})).filter{it.first!="Open Projectivy" || packageManager.getLeanbackLaunchIntentForPackage("com.spocky.projengmenu")!=null},
-   "Personalisation" to listOf(Triple("Photo screensaver","Family photos and timing",{safeStart(Intent(this,DreamSettingsActivity::class.java))}),Triple("Restore hidden videos","${HomeDismissals.count(this)} hidden from Home",{restoreHiddenVideos()})))
+   "Personalisation" to listOf(Triple("Photo screensaver","Family photos and timing",{safeStart(Intent(this,DreamSettingsActivity::class.java))}),Triple("Status & backup","Connections and local preferences",{safeStart(Intent(this,MaintenanceActivity::class.java))}),Triple("Restore hidden videos","${HomeDismissals.count(this)} hidden from Home",{restoreHiddenVideos()})))
   val controls=mutableMapOf<Pair<Int,Int>,View>()
   groups.forEachIndexed{col,(title,entries)->place(text(title,26),244+col*554,316,530,48);entries.forEachIndexed{row,(label,detail,action)->val v=tile(label+"\n"+detail,action).apply{setTextSize(TypedValue.COMPLEX_UNIT_PX,23*scale);maxLines=3;val copy=android.text.SpannableString(text);val start=label.length+1;copy.setSpan(android.text.style.AbsoluteSizeSpan(p(20)),start,copy.length,0);text=copy};controls[col to row]=v;place(v,244+col*554,382+row*148,530,126)}}
   val navId=focusViews["nav:7"]!!.id
@@ -454,10 +456,11 @@ class HomeActivity:Activity() {
   }.setNegativeButton("Cancel",null).show()
  }
  private val feedObserver=object:android.database.ContentObserver(handler){override fun onChange(selfChange:Boolean){loadWatchNext()}}
+ private val feedReturnFinalRetry=Runnable{if(feedActive && page=="Home")loadWatchNext(true)}
  private val feedReturnRetry=Runnable{if(feedActive && page=="Home")loadWatchNext(true)}
  private fun refreshFeedOnReturn(){
-  loadWatchNext(true);handler.removeCallbacks(feedReturnRetry)
-  if(page=="Home")handler.postDelayed(feedReturnRetry,5000)
+  loadWatchNext(true);handler.removeCallbacks(feedReturnRetry);handler.removeCallbacks(feedReturnFinalRetry)
+  if(page=="Home"){handler.postDelayed(feedReturnRetry,5000);handler.postDelayed(feedReturnFinalRetry,15000)}
  }
  private val feedPoll=object:Runnable{override fun run(){if(feedActive){loadWatchNext(true);handler.postDelayed(this,60000)}}}
  private val feedRead:Runnable=Runnable{

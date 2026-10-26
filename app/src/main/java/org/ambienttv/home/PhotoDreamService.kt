@@ -91,10 +91,12 @@ class PhotoDreamService:DreamService() {
    var selection=0
    var face:FaceRegion?=null
    var heroBackground:Bitmap?=null
+   var framing="auto"
    try {
     if(files.isNotEmpty()) {
      if(heroStyle){
       val currentIndex=Math.floorMod(startIndex,files.size)
+      framing=PhotoFraming.mode(applicationContext,files[currentIndex].name.substringAfter('-'))
       bitmap=PhotoDecoding.load(files[currentIndex]);face=bitmap?.let{HeroComposition.detect(it)}
       heroBackground=bitmap?.let{HeroBackdrop.create(it,face)}
       count=1
@@ -120,7 +122,7 @@ class PhotoDreamService:DreamService() {
     rendering=false
     if(!active || token!=generation) { result?.recycle();cachedBackdrop?.recycle();previewImages.forEach{it.recycle()};return@post }
     if(result!=null) {
-     if(picture is HeroDreamView)(picture as HeroDreamView).showHero(result,previewImages,selectedPreview,heroFace,cachedBackdrop) else picture.show(result)
+     if(picture is HeroDreamView)(picture as HeroDreamView).showHero(result,previewImages,selectedPreview,heroFace,cachedBackdrop,framing) else picture.show(result)
      startIndex=PhotoPoolPolicy.nextCursor(startIndex,columns,files.size)
      getSharedPreferences("dream",0).edit().putInt("cursor",startIndex).putString("cursorGeneration",sequenceKey).apply()
      val state=getSharedPreferences("dream-state",0)

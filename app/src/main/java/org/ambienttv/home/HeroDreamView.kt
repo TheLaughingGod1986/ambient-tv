@@ -55,14 +55,14 @@ internal class HeroDreamView(c:Context,private val previewPanel:WeatherPanel?=nu
  }
  override fun updateHeader(){val now=System.currentTimeMillis()/60000;if(now!=minute){minute=now;timeText=timeFormat.format(Date());dateText=dateFormat.format(Date());panel=previewPanel ?: WeatherStore.panel(context);invalidate()}}
  override fun show(bitmap:Bitmap){showHero(bitmap,emptyList(),0)}
- fun showHero(bitmap:Bitmap,previews:List<Bitmap>,selection:Int,face:FaceRegion?=null,background:Bitmap?=null){
+ fun showHero(bitmap:Bitmap,previews:List<Bitmap>,selection:Int,face:FaceRegion?=null,background:Bitmap?=null,framing:String="auto"){
   previous?.recycle();oldSoft?.recycle()
   previous=if(motionEnabled)current else null;oldSoft=if(motionEnabled)soft else null;oldEdge=if(motionEnabled)edge else null
   if(!motionEnabled){current?.recycle();soft?.recycle()}
   previousRect.set(currentRect)
   current=bitmap
   soft=background ?: HeroBackdrop.create(bitmap,face)
-  val fit=HeroComposition.place(bitmap.width,bitmap.height,face)
+  val fit=FramingPolicy.place(bitmap.width,bitmap.height,face,framing)
   currentRect.set(fit.left,fit.top,fit.left+fit.width,fit.top+fit.height)
   edge=edgeShader(bitmap,currentRect,face)
   context.getSharedPreferences("dream-state",0).edit().putBoolean("faceComposition",face!=null).putInt("heroWidth",fit.width.toInt()).apply()

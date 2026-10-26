@@ -50,7 +50,7 @@ internal object PlexFeed {
      }catch(_:Exception){/* Try the next advertised connection; never log its token or URL. */}
     }
    }
-   if(connected>0){cached=next.distinctBy{it.server+":"+it.ratingKey}.take(12);refreshedAt=android.os.SystemClock.elapsedRealtime();status(c,"Connected to Plex · ${cached.size} continue watching items")}
+   if(connected>0){c.getSharedPreferences("plex-status",0).edit().putLong("successAt",System.currentTimeMillis()).apply();cached=next.distinctBy{it.server+":"+it.ratingKey}.take(12);refreshedAt=android.os.SystemClock.elapsedRealtime();status(c,"Connected to Plex · ${cached.size} continue watching items")}
    else{status(c,"Signed in to Plex, but no server could be reached securely. Check that your Plex server is available.");if(android.os.SystemClock.elapsedRealtime()-refreshedAt>600000)cached=emptyList()}
   }catch(e:PlexHttpFailure){if(e.status==401)resetSessionCache();status(c,if(e.status==401)"Plex sign-in needs reconnecting." else "Plex could not refresh right now.");if(android.os.SystemClock.elapsedRealtime()-refreshedAt>600000)cached=emptyList()}
   catch(_:Exception){status(c,"Could not reach Plex. Your existing Plex app login is unchanged.");if(android.os.SystemClock.elapsedRealtime()-refreshedAt>600000)cached=emptyList()}

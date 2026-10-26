@@ -44,13 +44,14 @@ object WatchNextReader {
  private fun readProvider(c:Context):List<WatchItem> {
   if(Build.VERSION.SDK_INT<26)return emptyList()
   return try {
-   val out=mutableListOf<WatchItem>();var rows=0;var continueRows=0
+   val out=mutableListOf<WatchItem>();var rows=0;var continueRows=0;var youtubeRows=0;var youtubeNewest=0L
    val seen=mutableSetOf<String>()
    c.contentResolver.query(android.media.tv.TvContract.WatchNextPrograms.CONTENT_URI,null,null,null,"last_engagement_time_utc_millis DESC")?.use {cursor ->
     fun str(name:String):String {val i=cursor.getColumnIndex(name);return if(i>=0)cursor.getString(i).orEmpty() else ""}
     fun number(name:String):Long {val i=cursor.getColumnIndex(name);return if(i>=0 && !cursor.isNull(i))cursor.getLong(i) else -1}
     rows=cursor.count
     while(cursor.moveToNext()) {
+     if(str("package_name")=="com.google.android.youtube.tv"){youtubeRows++;youtubeNewest=maxOf(youtubeNewest,number("last_engagement_time_utc_millis"))}
      if(number("watch_next_type")!=0L)continue
      continueRows++;val owner=str("package_name")
      if(owner !in setOf("com.plexapp.android","com.google.android.youtube.tv"))continue
@@ -64,7 +65,7 @@ object WatchNextReader {
     }
    } ?: throw IllegalStateException("Watch Next provider unavailable")
    val snapshot=providerCache.update(out)
-   c.getSharedPreferences("feed-audit",0).edit().putInt("rows",rows).putInt("continueRows",continueRows).putBoolean("querySucceeded",true).putLong("providerReadAt",System.currentTimeMillis()).apply()
+   c.getSharedPreferences("feed-audit",0).edit().putInt("youtubeRows",youtubeRows).putLong("youtubeNewest",youtubeNewest).putInt("rows",rows).putInt("continueRows",continueRows).putBoolean("querySucceeded",true).putLong("providerReadAt",System.currentTimeMillis()).apply()
    snapshot
   }catch(e:Exception){
    c.getSharedPreferences("feed-audit",0).edit().putString("errorType",e.javaClass.simpleName).putBoolean("querySucceeded",false).apply()

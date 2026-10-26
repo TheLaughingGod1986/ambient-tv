@@ -10,6 +10,7 @@
    <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.HOME"/><category android:name="android.intent.category.DEFAULT"/></intent-filter>
   </activity>
   <activity android:name=".PlexConnectActivity" android:exported="true" android:label="Connect Plex"/>
+  <activity android:name=".MaintenanceActivity" android:exported="false"/>
   <activity android:name=".PhotoViewerActivity" android:exported="false"/>
   <activity android:name=".SettingsActivity" android:exported="true">
    <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LEANBACK_LAUNCHER"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
