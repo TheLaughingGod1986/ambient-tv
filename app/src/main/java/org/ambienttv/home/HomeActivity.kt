@@ -285,6 +285,7 @@ class HomeActivity:Activity() {
   if(previewFiles==null && (!same || chosen!=saved("$slot-ids")))prefs.edit().putLong("$slot-day",day).putString("$slot-ids",chosen.joinToString(",")).apply()
   return chosen.mapNotNull{byId[it]}
  }
+ private val photoSignatures=mutableMapOf<String,IntArray>() // Only accessed by the image worker.
  private fun updateHomePhotos() {
   if(page!="Home" || photoSlots.size!=4)return
   val files=photoFiles();val favs=favourites();val token=epoch
@@ -295,9 +296,23 @@ class HomeActivity:Activity() {
     android.graphics.BitmapFactory.decodeFile(file.path,bounds)
     if(bounds.outWidth>0 && bounds.outHeight>0)bounds.outWidth.toFloat()/bounds.outHeight else 0f
    }
+   fun key(file:File)="${file.path}:${file.length()}:${file.lastModified()}"
+   val activeKeys=files.map{key(it)}.toSet();photoSignatures.keys.retainAll(activeKeys)
+   fun signature(file:File):IntArray? {
+    val cacheKey=key(file);photoSignatures[cacheKey]?.let{return it}
+    val image=try{PhotoDecoding.load(file,64,64)}catch(_:Exception){null} ?: return null
+    val tiny=Bitmap.createScaledBitmap(image,12,12,true)
+    val pixels=IntArray(144);tiny.getPixels(pixels,0,12,0,0,12,12)
+    if(tiny!==image)tiny.recycle();image.recycle();photoSignatures[cacheKey]=pixels;return pixels
+   }
+   val chosen=mutableListOf<File>()
    fun pick(pool:List<File>,slot:String,target:Float):File? {
-    val ids=HomePhotoPolicy.fittingIds(pool.associate{it.name to (ratios[it] ?: 0f)},target)
-    return dailyPhotos(pool.filter{it.name in ids},"fit-$slot",1).firstOrNull()
+    val distinct=pool.filter{candidate->chosen.none{other->
+     candidate.name.substringAfter('-')==other.name.substringAfter('-') ||
+      signature(candidate)?.let{a->signature(other)?.let{b->HomePhotoSimilarity.similar(a,b)}}==true
+    }}
+    val ids=HomePhotoPolicy.fittingIds(distinct.associate{it.name to (ratios[it] ?: 0f)},target)
+    return dailyPhotos(distinct.filter{it.name in ids},"fit-$slot",1).firstOrNull()?.also{chosen.add(it)}
    }
    val narrow=contentPx(HomeLayout.photoWidth(1)).toFloat()/p(HomeLayout.PHOTO_H-12)
    val favourite=pick(favs,"favourites",narrow)
