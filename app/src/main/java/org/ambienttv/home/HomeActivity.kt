@@ -162,7 +162,7 @@ class HomeActivity:Activity() {
  private fun rounded(color:Int,focus:Boolean)=GradientDrawable().apply { setColor(color);cornerRadius=14*scale;setStroke(p(if(focus)3 else 1),if(focus)Color.WHITE else Color.rgb(43,66,82)) }
  private fun photoOutline(focused:Boolean)=GradientDrawable().apply{
   setColor(Color.TRANSPARENT);cornerRadius=14*scale
-  setStroke(maxOf(1,p(if(focused)3 else 1)),if(focused)Color.WHITE else Color.argb(150,126,168,211))
+  setStroke(maxOf(1,p(if(focused)3 else 1)),if(focused)Color.rgb(255,226,173)else Color.argb(150,126,168,211))
  }
  private fun dockBackground(focused:Boolean)=GradientDrawable(GradientDrawable.Orientation.TL_BR,
   if(focused)intArrayOf(Color.rgb(235,244,253),Color.rgb(208,226,246))else intArrayOf(Color.rgb(25,61,105),Color.rgb(13,39,72))).apply{
@@ -173,7 +173,7 @@ class HomeActivity:Activity() {
   compactLayout=getSharedPreferences("home-ui",0).getBoolean("compactSidebar",false);page=name;clearPage()
   backdrop=HomeBackdropView(this);place(backdrop,0,0,1920,1080)
   header=HomeWeatherView(this);place(header,244,38,600,110)
-  clock=text("",38).apply { gravity=Gravity.RIGHT or Gravity.CENTER_VERTICAL };place(clock,1430,52,430,90);updateHeader()
+  clock=text("",38).apply { gravity=Gravity.RIGHT or Gravity.CENTER_VERTICAL };place(clock,1430,40,430,118);updateHeader()
   val names=sidebarNames
   var first:View?=null
   names.forEachIndexed { index,label ->
@@ -216,7 +216,15 @@ class HomeActivity:Activity() {
  private fun updateHeader() {
   if(!::header.isInitialized) return
   header.update(previewWeather ?: WeatherStore.panel(this))
-  val format=SimpleDateFormat("HH:mm  EEE, d MMM",Locale.getDefault()).apply { timeZone=TimeZone.getDefault() };clock.text=format.format(Date())
+  val format=SimpleDateFormat("HH:mm  EEE, d MMM",Locale.getDefault()).apply { timeZone=TimeZone.getDefault() };clock.text=if(page=="Home") {
+   val time=SimpleDateFormat("HH:mm",Locale.getDefault()).format(Date())
+   val date=SimpleDateFormat("EEE, d MMM",Locale.getDefault()).format(Date())
+   android.text.SpannableString("$time\n$date").apply {
+    setSpan(android.text.style.RelativeSizeSpan(1.22f),0,time.length,0)
+    setSpan(android.text.style.StyleSpan(Typeface.BOLD),0,time.length,0)
+    setSpan(android.text.style.RelativeSizeSpan(.72f),time.length+1,length,0)
+   }
+  }else format.format(Date())
  }
  private fun headingAction(value:String,y:Int,key:String,action:()->Unit):TextView {
   val view=text(value,if(key=="heading:0")46 else 38).apply {
@@ -227,7 +235,8 @@ class HomeActivity:Activity() {
   focusViews[key]=view;place(view,244,y,if(key=="heading:0")550 else 650,62);return view
  }
  private fun home() {
-  headingAction("Your Photos  ›",174,"heading:0"){showPage("Photos")}
+  headingAction("Your Photos  ›",148,"heading:0"){showPage("Photos")}
+  place(text("Daily family memories",23).apply{setTextColor(Color.rgb(218,228,239))},244,210,900,30)
   val titles=listOf("Recent","Browse photos","Favourites","All Photos")
   val icons=listOf("Recent","Photos","Favourites","All Photos")
   val actions=listOf<()->Unit>(
@@ -246,7 +255,7 @@ class HomeActivity:Activity() {
    val detail=text("",20).apply{setTextColor(Color.rgb(204,216,228));maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END};words.addView(detail)
    caption.addView(words,LinearLayout.LayoutParams(0,-2,1f));card.addView(caption,FrameLayout.LayoutParams(-1,p(94),Gravity.BOTTOM))
    photoSlots.add(PhotoSlot(image,detail,placeholder));focusViews["photo:$i"]=card
-   place(card,HomeLayout.photoX(i),HomeLayout.PHOTO_Y+if(i==0)0 else 12,HomeLayout.photoWidth(i),HomeLayout.PHOTO_H-if(i==0)0 else 24)
+   place(card,HomeLayout.photoX(i),HomeLayout.PHOTO_Y+if(i==0)0 else 12,HomeLayout.photoWidth(i),HomeLayout.PHOTO_H-if(i==0)0 else 12)
   }
   updateHomePhotos()
   mediaHeading=headingAction("Continue Watching  ›",HomeLayout.MEDIA_HEADING_Y,"heading:1"){showPage("Continue Watching")}
