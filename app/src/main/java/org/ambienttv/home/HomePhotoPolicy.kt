@@ -19,6 +19,10 @@ object HomePhotoPolicy {
  }
  /** Small portrait zoom only when the padded face remains entirely visible; unknown/group shots stay whole. */
  fun featureFrame(w:Int,h:Int,tw:Int,th:Int,face:FaceRegion?):PhotoFrame {
+  if(w.toFloat()/h>=1.1f && abs(ln((w.toFloat()/h)/(tw.toFloat()/th)))>.18f) {
+   val scale=min(tw.toFloat()/w,th.toFloat()/h)
+   return PhotoFrame((tw-w*scale)/2,(th-h*scale)/2,w*scale,h*scale)
+  }
   if(face==null || w.toFloat()/h>=1.1f)return frame(w,h,tw,th)
   val fh=(face.bottom-face.top).coerceAtLeast(1f);val fw=(face.right-face.left).coerceAtLeast(1f)
   val l=(face.left-fw*.3f).coerceAtLeast(0f);val r=(face.right+fw*.3f).coerceAtMost(w.toFloat())
@@ -32,6 +36,12 @@ object HomePhotoPolicy {
    return if(low<=high)(target*anchor-(start+end)*.5f*zoom).coerceIn(low,high)else (target-size)/2
   }
   return PhotoFrame(offset(width,tw,l,r,.5f),offset(height,th,t,b,.42f),width,height)
+ }
+ /** Keep a varied pool near the best aspect fit, rather than repeatedly choosing one image. */
+ fun fittingIds(ratios:Map<String,Float>,target:Float):Set<String> {
+  val scores=ratios.filterValues{it>0f && it.isFinite()}.mapValues{abs(ln(it.value/target))}
+  val best=scores.values.minOrNull() ?: return emptySet()
+  return scores.filterValues{it<=max(.18f,best+.12f)}.keys
  }
  fun localDay(now:Long,zone:TimeZone=TimeZone.getDefault()):Long {
   val key=SimpleDateFormat("yyyy-MM-dd",Locale.ROOT).apply{timeZone=zone}.format(Date(now))

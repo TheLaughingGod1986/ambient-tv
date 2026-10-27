@@ -287,10 +287,30 @@ class HomeActivity:Activity() {
  }
  private fun updateHomePhotos() {
   if(page!="Home" || photoSlots.size!=4)return
-  val files=photoFiles();val favourite=dailyPhotos(favourites(),"favourites",1).firstOrNull()
-  val daily=dailyPhotos(files.filter{it!=favourite},"photos",3)
-  val selected=listOf(daily.getOrNull(0),daily.getOrNull(1),favourite,daily.getOrNull(2))
-  val descriptions=listOf(if(files.isEmpty())"No cached photos" else "Daily selection","Your collection",if(favourite==null)"No favourites yet" else "Saved by you","${files.size} cached photos")
+  val files=photoFiles();val favs=favourites();val token=epoch
+  worker.execute {
+   // Header-only decoding is bounded by the cached pool and never blocks TV focus/clock updates.
+   val ratios=files.associateWith { file->
+    val bounds=android.graphics.BitmapFactory.Options().apply{inJustDecodeBounds=true}
+    android.graphics.BitmapFactory.decodeFile(file.path,bounds)
+    if(bounds.outWidth>0 && bounds.outHeight>0)bounds.outWidth.toFloat()/bounds.outHeight else 0f
+   }
+   fun pick(pool:List<File>,slot:String,target:Float):File? {
+    val ids=HomePhotoPolicy.fittingIds(pool.associate{it.name to (ratios[it] ?: 0f)},target)
+    return dailyPhotos(pool.filter{it.name in ids},"fit-$slot",1).firstOrNull()
+   }
+   val narrow=contentPx(HomeLayout.photoWidth(1)).toFloat()/p(HomeLayout.PHOTO_H-12)
+   val favourite=pick(favs,"favourites",narrow)
+   val hero=pick(files.filter{it!=favourite},"hero",contentPx(HomeLayout.photoWidth(0)).toFloat()/p(HomeLayout.PHOTO_H))
+   val browse=pick(files.filter{it!=favourite && it!=hero},"browse",narrow)
+   val all=pick(files.filter{it!=favourite && it!=hero && it!=browse},"all",narrow)
+   val selected=listOf(hero,browse,favourite,all)
+   handler.post {if(token==epoch && page=="Home" && !isDestroyed)bindHomePhotos(selected,files.size)}
+  }
+ }
+ private fun bindHomePhotos(selected:List<File?>,photoCount:Int) {
+  val favourite=selected[2]
+  val descriptions=listOf(if(photoCount==0)"No cached photos" else "Daily selection","Your collection",if(favourite==null)"No favourites yet" else "Saved by you","$photoCount cached photos")
   photoSlots.forEachIndexed{i,slot->
    slot.detail.text=descriptions[i];focusViews["photo:$i"]?.contentDescription=listOf("Recent","Browse photos","Favourites","All Photos")[i]+", "+descriptions[i]
    val file=selected[i];slot.placeholder.visibility=if(file==null)View.VISIBLE else View.GONE
@@ -301,7 +321,7 @@ class HomeActivity:Activity() {
      if(token!=epoch || slot.image.requestVersion!=request)return@execute
      val bitmap=try{PhotoDecoding.load(file,768,900)}catch(_:Exception){null}
      if(token!=epoch || slot.image.requestVersion!=request){bitmap?.recycle();return@execute}
-     val fill=bitmap?.let{OrientationPhotoView.softFill(it)}
+     val fill:Bitmap?=null
      val face=bitmap?.let{HeroComposition.detect(it)}
      handler.post{if(token==epoch && slot.image.requestVersion==request && !isDestroyed){slot.image.show(bitmap,fill,face);slot.placeholder.visibility=if(bitmap==null)View.VISIBLE else View.GONE}else{bitmap?.recycle();fill?.recycle()}}
     }

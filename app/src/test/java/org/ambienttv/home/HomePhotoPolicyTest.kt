@@ -4,6 +4,18 @@ import org.junit.Test
 import java.time.Instant
 
 class HomePhotoPolicyTest {
+ @Test fun mismatchedLandscapeIsContainedInsteadOfCroppingPeopleAtEdges() {
+  val f=HomePhotoPolicy.featureFrame(1600,900,360,350,null)
+  assertTrue(f.left>=0 && f.top>=0 && f.left+f.width<=360.01 && f.top+f.height<=350.01)
+ }
+ @Test fun aspectPoolsPreferLandscapeForHeroAndSquareForCompanions() {
+  val ratios=mapOf("wide" to 1.7f,"landscape" to 1.5f,"square" to 1f,"portrait" to .56f,"bad" to 0f)
+  assertEquals(setOf("wide","landscape"),HomePhotoPolicy.fittingIds(ratios,1.7f))
+  assertEquals(setOf("square"),HomePhotoPolicy.fittingIds(ratios,1f))
+  assertEquals(setOf("portrait"),HomePhotoPolicy.fittingIds(mapOf("portrait" to .56f),1.7f))
+  assertTrue(HomePhotoPolicy.fittingIds(mapOf("bad" to 0f),1f).isEmpty())
+ }
+
  @Test fun featuredPortraitPreservesPaddedFaceAndAspectRatio() {
   for(face in listOf(FaceRegion(200f,80f,650f,600f),FaceRegion(100f,700f,700f,1200f))) {
    val f=HomePhotoPolicy.featureFrame(900,1600,510,390,face)
