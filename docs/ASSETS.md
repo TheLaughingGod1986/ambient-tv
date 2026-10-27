@@ -47,3 +47,7 @@ metadata with `python3 scripts/strip-image-metadata.py path/to/image.jpg`.
 Then run `python3 scripts/check-public.py` and visually inspect every image.
 Do not use a black rectangle or blur as the only protection for a family screenshot;
 replace it with a clean demo render from the start.
+
+## Homepage sunrise
+
+`app/src/main/res/drawable-nodpi/home_sunrise.png` is an AI-generated mountain sunrise created for Ambient TV. It contains no household photos or reference-screen content. The homepage crops it proportionally and blends its lower edge into navy; other pages retain their existing background.
