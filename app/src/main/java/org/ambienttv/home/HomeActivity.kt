@@ -227,16 +227,16 @@ class HomeActivity:Activity() {
   }else format.format(Date())
  }
  private fun headingAction(value:String,y:Int,key:String,action:()->Unit):TextView {
-  val view=text(value,if(key=="heading:0")46 else 38).apply {
+  val view=text(value,if(key=="heading:0")42 else 36).apply {
    typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL);id=nextId++;isFocusable=true;isFocusableInTouchMode=true;isClickable=true
    contentDescription=if(key=="heading:0")"Browse your photos" else "Browse Continue Watching"
    setOnClickListener{action()};setOnFocusChangeListener{_,focused->background=if(focused)rounded(Color.TRANSPARENT,true)else null}
   }
-  focusViews[key]=view;place(view,244,y,if(key=="heading:0")550 else 650,62);return view
+  focusViews[key]=view;place(view,244,y,if(key=="heading:0")550 else 650,if(key=="heading:0")52 else 62);return view
  }
  private fun home() {
   headingAction("Your Photos  ›",148,"heading:0"){showPage("Photos")}
-  place(text("Daily family memories",23).apply{setTextColor(Color.rgb(218,228,239))},244,210,900,30)
+  place(text("Daily family memories",22).apply{setTextColor(Color.rgb(218,228,239))},244,204,900,28)
   val titles=listOf("Recent","Browse photos","Favourites","All Photos")
   val icons=listOf("Recent","Photos","Favourites","All Photos")
   val actions=listOf<()->Unit>(
@@ -251,8 +251,8 @@ class HomeActivity:Activity() {
    val caption=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL;setPadding(p(20),0,p(16),p(16))}
    val icon=ImageView(this).apply{setImageDrawable(HomeNavIcon(icons[i]).apply{setTint(Color.WHITE)})};caption.addView(icon,LinearLayout.LayoutParams(p(30),p(30)).apply{rightMargin=p(12)})
    val words=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
-   words.addView(text(titles[i],if(i==0)30 else 28).apply{typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL);maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END})
-   val detail=text("",20).apply{setTextColor(Color.rgb(204,216,228));maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END};words.addView(detail)
+   words.addView(text(titles[i],26).apply{typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL);maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END})
+   val detail=text("",18).apply{setTextColor(Color.rgb(204,216,228));maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END};words.addView(detail)
    caption.addView(words,LinearLayout.LayoutParams(0,-2,1f));card.addView(caption,FrameLayout.LayoutParams(-1,p(94),Gravity.BOTTOM))
    photoSlots.add(PhotoSlot(image,detail,placeholder));focusViews["photo:$i"]=card
    place(card,HomeLayout.photoX(i),HomeLayout.PHOTO_Y+if(i==0)0 else 12,HomeLayout.photoWidth(i),HomeLayout.PHOTO_H-if(i==0)0 else 12)
@@ -270,8 +270,8 @@ class HomeActivity:Activity() {
    view.background=dockBackground(false);view.setOnFocusChangeListener{v,focused->originalFocus?.onFocusChange(v,focused);view.background=dockBackground(focused)}
    focusViews["footer:$i"]=view;place(view,244+i*333,HomeLayout.DOCK_Y,HomeLayout.MEDIA_W,HomeLayout.DOCK_H)
    val icon=if(i<3)try{packageManager.getApplicationIcon(listOf("com.plexapp.android","com.google.android.youtube.tv","com.synology.projectkailash")[i])}catch(_:Exception){HomeNavIcon("Apps").apply{setTint(titleColor)}}else HomeNavIcon(if(i==3)"Apps" else "Photos").apply{setTint(titleColor)}
-   val longest=maxOf(icon.intrinsicWidth,icon.intrinsicHeight,1);icon.setBounds(0,0,p((28f*icon.intrinsicWidth.coerceAtLeast(1)/longest).toInt()),p((28f*icon.intrinsicHeight.coerceAtLeast(1)/longest).toInt()))
-   view.setPadding(p(14),p(8),p(10),p(8));view.compoundDrawablePadding=p(12);view.setCompoundDrawables(icon,null,null,null)
+   val longest=maxOf(icon.intrinsicWidth,icon.intrinsicHeight,1);icon.setBounds(0,0,p((42f*icon.intrinsicWidth.coerceAtLeast(1)/longest).toInt()),p((42f*icon.intrinsicHeight.coerceAtLeast(1)/longest).toInt()))
+   view.setPadding(p(18),p(8),p(12),p(8));view.compoundDrawablePadding=p(12);view.setCompoundDrawables(icon,null,null,null)
    view.setTextSize(TypedValue.COMPLEX_UNIT_PX,if(i==2)21*scale else 23*scale);view.maxLines=1;view.ellipsize=android.text.TextUtils.TruncateAt.END
   }
   wireFocus();loadWatchNext()
@@ -313,9 +313,9 @@ class HomeActivity:Activity() {
   val image=ImageView(this).apply { scaleType=ImageView.ScaleType.CENTER_CROP }
   card.addView(image,FrameLayout.LayoutParams(-1,-1))
   card.addView(View(this).apply{background=GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,intArrayOf(Color.TRANSPARENT,Color.argb(235,1,8,14)))},FrameLayout.LayoutParams(-1,p(138),Gravity.BOTTOM))
-  val captions=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(p(28),0,p(12),p(18));gravity=Gravity.BOTTOM}
+  val captions=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(p(if(media)16 else 28),0,p(12),p(if(media)14 else 18));gravity=Gravity.BOTTOM}
   captions.addView(text(label,if(media)20 else 23).apply{typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL);maxLines=if(media)1 else 2;ellipsize=android.text.TextUtils.TruncateAt.END})
-  if(detail.isNotBlank())captions.addView(text(detail,if(media)17 else 22).apply{setTextColor(Color.LTGRAY);maxLines=1})
+  if(detail.isNotBlank())captions.addView(text(detail,if(media)18 else 22).apply{setTextColor(Color.LTGRAY);maxLines=1})
   card.addView(captions,FrameLayout.LayoutParams(-1,p(100),Gravity.BOTTOM))
   card.setOnFocusChangeListener { _,focus->card.foreground=rounded(Color.TRANSPARENT,focus) };card.setOnClickListener { action() }
   if(file!=null){image.setImageResource(android.R.drawable.ic_menu_gallery);loadPhoto(file,image)}
@@ -550,7 +550,8 @@ class HomeActivity:Activity() {
    val message=if(signature=="loading")"Loading Continue Watching…" else "No continue watching items available. Open Plex or YouTube below."
    mediaHost.addView(text(message,27).apply{setTextColor(Color.rgb(185,204,218));contentDescription=message},FrameLayout.LayoutParams(-1,p(90)).apply{topMargin=p(30)})
   } else items.forEachIndexed{i,item->
-   val card=photoTile(null,item.title,media=true){item.open(this)};placeCard(card,i);bindWatchOptions(card,item,i)
+   val remaining=if(item.nextEpisode)"Next episode"else if(item.duration>0 && item.position>=0 && item.position<item.duration)"${(item.duration-item.position+59999)/60000} min left"else ""
+   val card=photoTile(null,item.title,detail=remaining,media=true){item.open(this)};placeCard(card,i);bindWatchOptions(card,item,i)
    val source=if(item.owner=="com.plexapp.android")"Plex"else"YouTube"
    val watchedProgress=if(item.nextEpisode)null else WatchNextPolicy.progress(item.position,item.duration)
    card.contentDescription=item.title+", "+source+", hold OK for options"+(if(item.nextEpisode)", Next episode"else "")+(watchedProgress?.let{", ${it/10} percent watched"} ?: "")
