@@ -171,7 +171,7 @@ class HomeActivity:Activity() {
  private fun showPage(name:String) {
   if(name!=page && name in listOf("Movies","TV Shows","Anime")){catalogPageIndex=0;catalogFocusAfterLoad=null}
   compactLayout=getSharedPreferences("home-ui",0).getBoolean("compactSidebar",false);page=name;clearPage()
-  backdrop=HomeBackdropView(this);place(backdrop,0,0,1920,1080)
+  backdrop=HomeBackdropView(this,name=="Home");place(backdrop,0,0,1920,1080)
   header=HomeWeatherView(this);place(header,244,38,600,110)
   clock=text("",38).apply { gravity=Gravity.RIGHT or Gravity.CENTER_VERTICAL };place(clock,1430,40,430,118);updateHeader()
   val names=sidebarNames
@@ -564,7 +564,7 @@ class HomeActivity:Activity() {
     val bitmap=WatchNextReader.art(this,item.art)
     handler.post{if(token==epoch && revision==mediaEpoch && bitmap!=null){mediaBitmaps.add(bitmap);image.setPadding(0,0,0,0);image.scaleType=ImageView.ScaleType.CENTER_CROP;image.setImageBitmap(bitmap)}else bitmap?.recycle()}
    }
-   watchedProgress?.let{actual->card.addView(ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply{max=1000;progress=actual;progressTintList=android.content.res.ColorStateList.valueOf(Color.rgb(66,205,235));progressBackgroundTintList=android.content.res.ColorStateList.valueOf(Color.rgb(70,78,92))},FrameLayout.LayoutParams(-1,p(4),Gravity.BOTTOM))}
+   watchedProgress?.let{actual->card.addView(ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply{max=1000;progress=actual;progressTintList=android.content.res.ColorStateList.valueOf(if(source=="YouTube")Color.rgb(255,36,62)else Color.rgb(66,205,235));progressBackgroundTintList=android.content.res.ColorStateList.valueOf(Color.rgb(70,78,92))},FrameLayout.LayoutParams(-1,p(4),Gravity.BOTTOM))}
   }
   wireFocus();if(focused!=null)(focusViews["media:$newIndex"] ?: focusViews["footer:0"])?.requestFocus()
  }
