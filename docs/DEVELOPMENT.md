@@ -66,3 +66,23 @@ Projectivy provider UUID. Configure release signing outside Git. Never publish a
 keystore, private account backup or local SDK properties. Review third-party
 notices and current service terms. Run the public-file check and an independent
 secret scanner on the complete Git history before making a repository public.
+
+## Approved family-first Home
+
+Home uses a large featured memory, Browse photos, and two stacked photo shortcuts.
+The three quick actions (YouTube, Plex, Synology Photos) precede four Continue
+Watching cards. All apps is in the sidebar; the screensaver remains in Settings.
+The sidebar reserves its own area even when compact labels expand. All eight
+pages share the mountain sunset and stacked clock/date treatment.
+
+Daily photo selection uses the Europe/London calendar day, retains its chosen
+provider IDs through background cache refreshes, and prefers scenes absent from
+the previous daily row. Capture times (when available) and local tiny colour
+signatures help avoid burst-like repetitions; this is a heuristic, not semantic
+scene recognition. A small library or a single favourite can still repeat across
+days. Explicit Refresh photos allows a new daily choice. No personal images or
+signatures are uploaded. Photo thumbnails honour JPEG EXIF rotation/mirroring.
+
+`TvRegression` covers the stacked cards, three quick actions, empty and mixed
+media, refresh focus, all eight page bounds, and screensaver Back. Its illustrative
+feed exists only in the instrumentation source, not in production content.

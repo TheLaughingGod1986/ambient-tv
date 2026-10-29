@@ -50,4 +50,4 @@ replace it with a clean demo render from the start.
 
 ## Homepage sunrise
 
-`app/src/main/res/drawable-nodpi/home_sunrise.png` is an AI-generated mountain sunrise created for Ambient TV. It contains no household photos or reference-screen content. The homepage crops it proportionally and blends its lower edge into navy; other pages retain their existing background.
+`app/src/main/res/drawable-nodpi/home_sunrise.png` is an AI-generated mountain sunrise created for Ambient TV. It contains no household photos or reference-screen content. The homepage crops it proportionally and blends its lower edge into navy; all eight pages use the same background treatment.

@@ -32,17 +32,24 @@ class TvRegression:Instrumentation(){
    c.getSharedPreferences("home-ui",0).edit().putBoolean("compactSidebar",true).commit()
    main{h.showPageForTest("Home")};waitFor{h.readyForTest() && h.photoReadyForTest()}
    stage="directional navigation"
-   main{h.focusForTest("nav:0")};waitFor{h.sidebarExpandedForTest()};SystemClock.sleep(250);capture("sidebar-expanded");var photoBounds=android.graphics.Rect();main{photoBounds=h.boundsForTest().getValue("photo:0");check(kotlin.math.abs(photoBounds.left-w*128f/1920f)<2f);check(photoBounds.width()>h.boundsForTest().getValue("photo:1").width()*1.4f)};sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_RIGHT);waitForIdleSync();waitFor{h.focusKeyForTest()=="photo:0" && !h.sidebarExpandedForTest()};main{check(h.boundsForTest().getValue("photo:0")==photoBounds)};SystemClock.sleep(250);capture("sidebar-compact")
-   for(i in 1..3){sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_RIGHT);waitForIdleSync();waitFor{h.focusKeyForTest()=="photo:$i"}}
-   for(i in 2 downTo 0){sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_LEFT);waitForIdleSync();waitFor{h.focusKeyForTest()=="photo:$i"}}
-   sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_DOWN);waitForIdleSync();waitFor{h.focusKeyForTest()=="heading:1"}
+   main{h.focusForTest("nav:0")};waitFor{h.sidebarExpandedForTest()};SystemClock.sleep(250);capture("sidebar-expanded");var photoBounds=android.graphics.Rect();main{photoBounds=h.boundsForTest().getValue("photo:0");check(kotlin.math.abs(photoBounds.left-w*244f/1920f)<2f);check(photoBounds.width()>h.boundsForTest().getValue("photo:1").width()*1.3f)};sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_RIGHT);waitForIdleSync();waitFor{h.focusKeyForTest()=="photo:0" && !h.sidebarExpandedForTest()};main{check(h.boundsForTest().getValue("photo:0")==photoBounds)};SystemClock.sleep(250);capture("sidebar-compact")
+   for(i in 1..2){sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_RIGHT);waitForIdleSync();waitFor{h.focusKeyForTest()=="photo:$i"}}
+   sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_DOWN);waitForIdleSync();waitFor{h.focusKeyForTest()=="photo:3"}
+   for(i in 1 downTo 0){sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_LEFT);waitForIdleSync();waitFor{h.focusKeyForTest()=="photo:$i"}}
    sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_DOWN);waitForIdleSync();waitFor{h.focusKeyForTest()=="footer:0"}
-   for(i in 1..4){sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_RIGHT);waitForIdleSync();waitFor{h.focusKeyForTest()=="footer:$i"}}
+   for(i in 1..2){sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_RIGHT);waitForIdleSync();waitFor{h.focusKeyForTest()=="footer:$i"}}
    main{h.focusForTest("nav:1")};sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_CENTER);waitFor{h.pageForTest()=="TV Shows"}
    sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);waitFor{h.pageForTest()=="Home"}
+   stage="mixed media"
+   HomeActivity.previewWatch=(0..3).map{i->WatchItem("Demo video ${i+1}: a deliberately long title to check truncation",if(i%2==0)"com.plexapp.android"else "com.google.android.youtube.tv","https://example.invalid/demo/$i","android.resource://org.ambienttv.home/"+R.drawable.home_mountains,if(i==3)0 else 60000,if(i==3)0 else 600000,providerRowId=i.toLong(),nextEpisode=i==2)}
+   main{h.showPageForTest("Home")};waitFor{h.feedSnapshotForTest().size==4}
+   main{h.focusForTest("footer:0")};sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_DOWN);waitForIdleSync();waitFor{h.focusKeyForTest()=="heading:1"}
+   sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_DOWN);waitForIdleSync();waitFor{h.focusKeyForTest()=="media:0"}
+   for(i in 1..3){sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_RIGHT);waitForIdleSync();waitFor{h.focusKeyForTest()=="media:$i"}}
+   main{h.refreshDecorForTest()};waitForIdleSync();main{check(h.focusKeyForTest()=="media:3")}
    stage="pages"
    for(page in listOf("Home","TV Shows","Movies","Anime","Apps","Photos","Search","Settings")){
-    stage="page: $page";main{h.showPageForTest(page)};waitFor{h.secondaryReadyForTest()};SystemClock.sleep(150)
+    stage="page: $page";main{h.showPageForTest(page)};waitFor{h.secondaryReadyForTest() && (page!="Home" || h.feedSnapshotForTest().size==4 && h.photoReadyForTest())};SystemClock.sleep(400)
     main{check(h.boundsForTest().values.all{it.left>=0 && it.top>=0 && it.right<=w && it.bottom<=height})}
     capture(page.replace(' ','-'))
    }
@@ -59,9 +66,9 @@ class TvRegression:Instrumentation(){
    stage="dream back";sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
    waitFor{!c.getSharedPreferences("dream-state",0).getBoolean("active",true)}
    main{check(h.pageForTest()=="Home")}
-   report.put("passed",true).put("width",w).put("height",height).put("pages",8).put("compactSidebar",true).put("contentDoesNotMove",true).put("directionalNavigation",true).put("enterAndBack",true).put("backupRoundTrip",true).put("dreamBack",true)
+   report.put("passed",true).put("width",w).put("height",height).put("pages",8).put("compactSidebar",true).put("contentDoesNotMove",true).put("directionalNavigation",true).put("mixedMedia",true).put("refreshPreservesFocus",true).put("enterAndBack",true).put("backupRoundTrip",true).put("dreamBack",true)
   }catch(e:Throwable){report.put("passed",false).put("error",stage+": "+e.javaClass.simpleName+": "+e.message)}
-  finally{targetContext.getSharedPreferences("home-ui",0).edit().putBoolean("compactSidebar",oldCompact).commit();HomeActivity.previewFiles=null;HomeActivity.previewWeather=null;HomeActivity.previewResolution=null;home?.let{main{it.finish()}}}
+  finally{targetContext.getSharedPreferences("home-ui",0).edit().putBoolean("compactSidebar",oldCompact).commit();HomeActivity.previewWatch=null;HomeActivity.previewFiles=null;HomeActivity.previewWeather=null;HomeActivity.previewResolution=null;home?.let{main{it.finish()}}}
   File(targetContext.filesDir,"regression.json").writeText(report.toString(2));finish(if(report.optBoolean("passed"))Activity.RESULT_OK else Activity.RESULT_CANCELED,Bundle().apply{putString("regression",report.toString())})
  }
 }

@@ -46,8 +46,12 @@ object Photos {
     val older=catalog.asReversed().filter{item->recent.take(PhotoMixPolicy.RECENT).none{it.getInt("id")==item.getInt("id")}}
     val archiveOffset=if(older.isEmpty())0 else Math.floorMod(state.getInt("archiveOffset",0),older.size)
     val archive=if(older.isEmpty())emptyList() else (0 until minOf(PhotoPoolPolicy.LIMIT,older.size)).map{older[(archiveOffset+it)%older.size]}
-    val selectedIds=PhotoMixPolicy.select(recent.map{it.getInt("id")},archive.map{it.getInt("id")})
-    val byId=(recent+archive).associateBy{it.getInt("id")}
+    val mixedIds=PhotoMixPolicy.select(recent.map{it.getInt("id")},archive.map{it.getInt("id")})
+    // Keep today's visible memories in the authorised cache through background refreshes.
+    val daily=c.getSharedPreferences("home-daily",0)
+    val pinned=if(daily.getLong("row-day",Long.MIN_VALUE)==HomePhotoPolicy.localDay(now,java.util.TimeZone.getTimeZone("Europe/London")))daily.getString("row-ids","").orEmpty().split(',').mapNotNull{it.toIntOrNull()}.filter{id->catalog.any{it.getInt("id")==id}}else emptyList()
+    val selectedIds=(pinned+mixedIds).distinct().take(PhotoPoolPolicy.LIMIT)
+    val byId=catalog.associateBy{it.getInt("id")}
     val items=selectedIds.map{byId.getValue(it)}
     val nextArchiveOffset=if(older.isEmpty())0 else (archiveOffset+PhotoMixPolicy.MEMORIES)%older.size
     require(items.isNotEmpty())
@@ -73,7 +77,7 @@ object Photos {
     }
     require(created.sumOf { it.length() } <= PhotoPoolPolicy.NEW_SET_BYTES)
     // Publish a complete generation before pruning any previous files.
-    require(state.edit().remove("diagnostic").putLong("success",now).putString("generation", "$now-").putInt("generationCount",created.size).putString("generationOrder",org.json.JSONArray(created.map {it.name}).toString()).putInt("poolLimit",PhotoPoolPolicy.LIMIT).putInt("archiveOffset",nextArchiveOffset).putInt("mixVersion",1).putInt("catalogCount",catalog.size).putLong("newestPhotoTime",recent.first().getLong("time")).putLong("oldestSelectedTime",items.minOf{it.getLong("time")}).commit())
+    require(state.edit().remove("diagnostic").putLong("success",now).putString("generation", "$now-").putInt("generationCount",created.size).putString("generationOrder",org.json.JSONArray(created.map {it.name}).toString()).putInt("poolLimit",PhotoPoolPolicy.LIMIT).putInt("archiveOffset",nextArchiveOffset).putInt("mixVersion",1).putString("photoTimes",org.json.JSONObject().apply{items.forEach{put(it.getInt("id").toString(),it.optLong("time"))}}.toString()).putInt("catalogCount",catalog.size).putLong("newestPhotoTime",recent.first().getLong("time")).putLong("oldestSelectedTime",items.minOf{it.getLong("time")}).commit())
     committed = true
     // Old launcher URI reads can safely alias into the committed set after pruning.
     val old = files(c).filter { it !in created }

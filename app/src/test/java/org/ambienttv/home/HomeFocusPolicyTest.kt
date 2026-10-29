@@ -14,5 +14,5 @@ class HomeFocusPolicyTest {
   for(dir in listOf("right","right","down","down","left","left"))n=HomeFocusPolicy.target(n,dir,2)
   assertEquals(FocusNode("nav",0),n)
  }
- @Test fun topAndBottomDoNotWrapIntoUnexpectedApps(){assertEquals(FocusNode("nav",0),HomeFocusPolicy.target(FocusNode("nav",0),"up",2));assertEquals(FocusNode("footer",3),HomeFocusPolicy.target(FocusNode("footer",3),"down",2))}
+ @Test fun topAndBottomDoNotWrapIntoUnexpectedApps(){assertEquals(FocusNode("nav",0),HomeFocusPolicy.target(FocusNode("nav",0),"up",2));assertEquals(FocusNode("media",1),HomeFocusPolicy.target(FocusNode("media",1),"down",2))}
 }

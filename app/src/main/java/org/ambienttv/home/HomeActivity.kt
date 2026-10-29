@@ -21,7 +21,7 @@ import java.util.concurrent.Executors
 
 /** Ambient TV launcher, with independent photo and resume-feed refresh. */
 class HomeActivity:Activity() {
- companion object {internal var previewFiles:List<File>?=null;internal var previewWeather:WeatherPanel?=null;internal var previewResolution:Pair<Int,Int>?=null}
+ companion object {internal var previewFiles:List<File>?=null;internal var previewWeather:WeatherPanel?=null;internal var previewResolution:Pair<Int,Int>?=null;internal var previewWatch:List<WatchItem>?=null}
  private fun photoFiles()=previewFiles ?: Photos.currentFiles(this)
  internal fun pageForTest()=page
  internal fun focusForTest(key:String){check(focusViews[key]?.requestFocus()==true)}
@@ -38,7 +38,7 @@ class HomeActivity:Activity() {
   return !loading(root)
  }
 
- internal fun readyForTest()=photoSlots.size==4 && focusViews.containsKey("footer:4")
+ internal fun readyForTest()=photoSlots.size==4 && focusViews.containsKey("footer:2")
  internal fun photoReadyForTest()=photoSlots.count{it.image.hasPhoto}>=minOf(3,photoFiles().size)
  internal fun refreshDecorForTest(){updateHeader();updateHomePhotos()}
  internal fun boundsForTest()=focusViews.mapValues{(_,view)->Rect().also{view.getDrawingRect(it);root.offsetDescendantRectToMyCoords(view,it)}}
@@ -91,7 +91,7 @@ class HomeActivity:Activity() {
   val expanded=!compactLayout || focusViews.filterKeys{it.startsWith("nav:")}.values.any{it.hasFocus()}
   if(sidebarExpanded==expanded)return
   val first=sidebarExpanded==null;sidebarExpanded=expanded;sidebarAnimation?.cancel()
-  val fullWidth=if(compactLayout)244 else 220;val navWidth=if(compactLayout)196 else 180
+  val fullWidth=220;val navWidth=if(compactLayout)196 else 180
   val start=sidebarPanel.layoutParams.width;val end=p(if(expanded)fullWidth else 96)
   sidebarNames.forEachIndexed{i,label->(focusViews["nav:$i"] as? TextView)?.let{v->
    v.text=if(expanded)label else "";v.compoundDrawablePadding=if(expanded)p(14)else 0
@@ -104,7 +104,7 @@ class HomeActivity:Activity() {
   val motion=Settings.Global.getFloat(contentResolver,Settings.Global.ANIMATOR_DURATION_SCALE,1f)>0f
   if(first || !motion)frame(end) else sidebarAnimation=android.animation.ValueAnimator.ofInt(start,end).apply{duration=180;addUpdateListener{frame(it.animatedValue as Int)};start()}
  }
- private fun contentPx(value:Int)=p(if(compactLayout)(value*1760f/1644f).toInt()else value)
+ private fun contentPx(value:Int)=p(value)
  private lateinit var header:HomeWeatherView
  private lateinit var clock:TextView
  private var mediaHeading:TextView?=null
@@ -151,7 +151,7 @@ class HomeActivity:Activity() {
   detach(root);root.removeAllViews();bitmaps.forEach {if(!it.isRecycled)it.recycle()};bitmaps.clear()
  }
  private fun p(v:Int)=(v*scale).toInt()
- private fun place(view:View,x:Int,y:Int,w:Int,h:Int) { val content=x>=244;root.addView(view,FrameLayout.LayoutParams(if(content)contentPx(w)else p(w),p(h)).apply { leftMargin=if(content && compactLayout)p(128)+contentPx(x-244)else p(x);topMargin=p(y) }) }
+ private fun place(view:View,x:Int,y:Int,w:Int,h:Int) { val content=x>=244;root.addView(view,FrameLayout.LayoutParams(if(content)contentPx(w)else p(w),p(h)).apply { leftMargin=p(x);topMargin=p(y) }) }
  private fun text(value:String,size:Int=30):TextView=TextView(this).apply { text=value;setTextSize(TypedValue.COMPLEX_UNIT_PX,size*scale);setTextColor(titleColor);gravity=Gravity.CENTER_VERTICAL }
  private fun tile(label:String,action:()->Unit):TextView=text(label,26).apply {
   id=nextId++;isFocusable=true;isFocusableInTouchMode=true;isClickable=true;setPadding(p(20),p(10),p(16),p(10));contentDescription=label
@@ -171,7 +171,7 @@ class HomeActivity:Activity() {
  private fun showPage(name:String) {
   if(name!=page && name in listOf("Movies","TV Shows","Anime")){catalogPageIndex=0;catalogFocusAfterLoad=null}
   compactLayout=getSharedPreferences("home-ui",0).getBoolean("compactSidebar",false);page=name;clearPage()
-  backdrop=HomeBackdropView(this,name=="Home");place(backdrop,0,0,1920,1080)
+  backdrop=HomeBackdropView(this,true);place(backdrop,0,0,1920,1080)
   header=HomeWeatherView(this);place(header,244,38,600,110)
   clock=text("",38).apply { gravity=Gravity.RIGHT or Gravity.CENTER_VERTICAL };place(clock,1430,40,430,118);updateHeader()
   val names=sidebarNames
@@ -216,28 +216,28 @@ class HomeActivity:Activity() {
  private fun updateHeader() {
   if(!::header.isInitialized) return
   header.update(previewWeather ?: WeatherStore.panel(this))
-  val format=SimpleDateFormat("HH:mm  EEE, d MMM",Locale.getDefault()).apply { timeZone=TimeZone.getDefault() };clock.text=if(page=="Home") {
-   val time=SimpleDateFormat("HH:mm",Locale.getDefault()).format(Date())
-   val date=SimpleDateFormat("EEE, d MMM",Locale.getDefault()).format(Date())
+  clock.text=run {
+   val time=SimpleDateFormat("HH:mm",Locale.getDefault()).apply{timeZone=TimeZone.getTimeZone("Europe/London")}.format(Date())
+   val date=SimpleDateFormat("EEE, d MMM",Locale.getDefault()).apply{timeZone=TimeZone.getTimeZone("Europe/London")}.format(Date())
    android.text.SpannableString("$time\n$date").apply {
     setSpan(android.text.style.RelativeSizeSpan(1.22f),0,time.length,0)
     setSpan(android.text.style.StyleSpan(Typeface.BOLD),0,time.length,0)
     setSpan(android.text.style.RelativeSizeSpan(.72f),time.length+1,length,0)
    }
-  }else format.format(Date())
+  }
  }
  private fun headingAction(value:String,y:Int,key:String,action:()->Unit):TextView {
-  val view=text(value,if(key=="heading:0")42 else 36).apply {
+  val view=text(value,if(key=="heading:0")42 else 32).apply {
    typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL);id=nextId++;isFocusable=true;isFocusableInTouchMode=true;isClickable=true
    contentDescription=if(key=="heading:0")"Browse your photos" else "Browse Continue Watching"
    setOnClickListener{action()};setOnFocusChangeListener{_,focused->background=if(focused)rounded(Color.TRANSPARENT,true)else null}
   }
-  focusViews[key]=view;place(view,244,y,if(key=="heading:0")550 else 650,if(key=="heading:0")52 else 62);return view
+  focusViews[key]=view;place(view,244,y,if(key=="heading:0")550 else 650,52);return view
  }
  private fun home() {
-  headingAction("Your Photos  ›",148,"heading:0"){showPage("Photos")}
-  place(text("Daily family memories",22).apply{setTextColor(Color.rgb(218,228,239))},244,204,900,28)
-  val titles=listOf("Recent","Browse photos","Favourites","All Photos")
+  headingAction("Your Photos",148,"heading:0"){showPage("Photos")}
+  place(text("Family memories, all in one place",22).apply{setTextColor(Color.rgb(218,228,239))},244,204,900,28)
+  val titles=listOf("Featured memory","Browse photos","Favourites","All Photos")
   val icons=listOf("Recent","Photos","Favourites","All Photos")
   val actions=listOf<()->Unit>(
    {photoFiles().firstOrNull()?.let{openPhoto(it)} ?: safeStart(Intent(this,SettingsActivity::class.java))},
@@ -245,45 +245,42 @@ class HomeActivity:Activity() {
   for(i in titles.indices) {
    val card=ClippedPhotoCard(this,14*scale).apply{id=nextId++;isFocusable=true;isFocusableInTouchMode=true;isClickable=true;background=rounded(Color.rgb(17,35,49),false);foreground=photoOutline(false);clipToOutline=true;contentDescription=titles[i];setOnClickListener{actions[i]()};setOnFocusChangeListener{_,focus->foreground=photoOutline(focus)}}
    card.elevation=p(if(i==0)6 else 4).toFloat()
-   val image=OrientationPhotoView(this,true);card.addView(image,FrameLayout.LayoutParams(-1,-1))
+   val image=OrientationPhotoView(this,true);card.addView(image,FrameLayout.LayoutParams(if(i<2)-1 else p(245),-1,Gravity.RIGHT))
    val placeholder=ImageView(this).apply{setImageDrawable(HomeNavIcon(icons[i]).apply{setTint(Color.rgb(164,191,210))})};card.addView(placeholder,FrameLayout.LayoutParams(p(70),p(70),Gravity.CENTER).apply{bottomMargin=p(30)})
-   card.addView(View(this).apply{background=GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,intArrayOf(Color.TRANSPARENT,Color.argb(242,4,10,18)))},FrameLayout.LayoutParams(-1,p(170),Gravity.BOTTOM))
+   card.addView(View(this).apply{background=GradientDrawable(if(i<2)GradientDrawable.Orientation.TOP_BOTTOM else GradientDrawable.Orientation.RIGHT_LEFT,if(i<2)intArrayOf(Color.TRANSPARENT,Color.argb(242,4,10,18))else intArrayOf(Color.TRANSPARENT,Color.rgb(15,32,54),Color.rgb(15,32,54)))},FrameLayout.LayoutParams(-1,if(i<2)p(170)else -1,Gravity.BOTTOM))
    val caption=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL;setPadding(p(20),0,p(16),p(16))}
    val icon=ImageView(this).apply{setImageDrawable(HomeNavIcon(icons[i]).apply{setTint(Color.WHITE)})};caption.addView(icon,LinearLayout.LayoutParams(p(30),p(30)).apply{rightMargin=p(12)})
    val words=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
    words.addView(text(titles[i],26).apply{typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL);maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END})
    val detail=text("",18).apply{setTextColor(Color.rgb(204,216,228));maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END};words.addView(detail)
-   caption.addView(words,LinearLayout.LayoutParams(0,-2,1f));card.addView(caption,FrameLayout.LayoutParams(-1,p(94),Gravity.BOTTOM))
+   caption.addView(words,LinearLayout.LayoutParams(0,-2,1f));card.addView(caption,FrameLayout.LayoutParams(-1,p(94),if(i<2)Gravity.BOTTOM else Gravity.CENTER_VERTICAL))
    photoSlots.add(PhotoSlot(image,detail,placeholder));focusViews["photo:$i"]=card
-   place(card,HomeLayout.photoX(i),HomeLayout.PHOTO_Y+if(i==0)0 else 12,HomeLayout.photoWidth(i),HomeLayout.PHOTO_H-if(i==0)0 else 12)
+   place(card,HomeLayout.photoX(i),HomeLayout.photoY(i),HomeLayout.photoWidth(i),HomeLayout.photoHeight(i))
   }
   updateHomePhotos()
   mediaHeading=headingAction("Continue Watching  ›",HomeLayout.MEDIA_HEADING_Y,"heading:1"){showPage("Continue Watching")}
   mediaHost=FrameLayout(this);place(mediaHost,HomeLayout.LEFT,HomeLayout.MEDIA_Y,HomeLayout.RIGHT-HomeLayout.LEFT,HomeLayout.MEDIA_H)
   renderWatchItems(emptyList(),"loading")
+  place(text("Quick access",32).apply{typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)},244,600,800,48)
   val footerActions=listOf<Pair<String,()->Unit>>(
-   "Open Plex" to {launchPackage("com.plexapp.android")},"Open YouTube" to {launchPackage("com.google.android.youtube.tv")},
-   "Open Synology Photos" to {launchPackage("com.synology.projectkailash")},"All apps" to {showPage("Apps")},"Screensaver" to {startScreensaver()})
+   "YouTube" to {launchPackage("com.google.android.youtube.tv")},"Plex" to {launchPackage("com.plexapp.android")},
+   "Synology Photos" to {launchPackage("com.synology.projectkailash")})
   footerActions.forEachIndexed{i,(label,action)->
    val view=tile(label,action)
    val originalFocus=view.onFocusChangeListener
-   view.background=dockBackground(false);view.setOnFocusChangeListener{v,focused->originalFocus?.onFocusChange(v,focused);view.background=dockBackground(focused)}
-   focusViews["footer:$i"]=view;place(view,244+i*333,HomeLayout.DOCK_Y,HomeLayout.MEDIA_W,HomeLayout.DOCK_H)
-   val icon=if(i<3)try{packageManager.getApplicationIcon(listOf("com.plexapp.android","com.google.android.youtube.tv","com.synology.projectkailash")[i])}catch(_:Exception){HomeNavIcon("Apps").apply{setTint(titleColor)}}else HomeNavIcon(if(i==3)"Apps" else "Photos").apply{setTint(titleColor)}
+   view.background=dockBackground(i==0);if(i==0)view.setTextColor(Color.rgb(9,22,36));view.setOnFocusChangeListener{v,focused->originalFocus?.onFocusChange(v,focused);view.background=dockBackground(focused || i==0);if(i==0)view.setTextColor(Color.rgb(9,22,36));view.foreground=if(focused)photoOutline(true)else null}
+   focusViews["footer:$i"]=view;place(view,244+i*555,HomeLayout.DOCK_Y,534,HomeLayout.DOCK_H)
+   val icon=if(i<3)try{packageManager.getApplicationIcon(listOf("com.google.android.youtube.tv","com.plexapp.android","com.synology.projectkailash")[i])}catch(_:Exception){HomeNavIcon("Apps").apply{setTint(if(i==0)Color.rgb(9,22,36)else titleColor)}}else HomeNavIcon(if(i==3)"Apps" else "Photos").apply{setTint(titleColor)}
    val longest=maxOf(icon.intrinsicWidth,icon.intrinsicHeight,1);icon.setBounds(0,0,p((42f*icon.intrinsicWidth.coerceAtLeast(1)/longest).toInt()),p((42f*icon.intrinsicHeight.coerceAtLeast(1)/longest).toInt()))
    view.setPadding(p(18),p(8),p(12),p(8));view.compoundDrawablePadding=p(12);view.setCompoundDrawables(icon,null,null,null)
-   view.setTextSize(TypedValue.COMPLEX_UNIT_PX,if(i==2)21*scale else 23*scale);view.maxLines=1;view.ellipsize=android.text.TextUtils.TruncateAt.END
+   val subtitle=listOf("Watch videos together","Movies & TV shows","Open Synology Photos")[i]
+   view.text=android.text.SpannableString("$label\n$subtitle").apply{
+    setSpan(android.text.style.StyleSpan(Typeface.BOLD),0,label.length,0)
+    setSpan(android.text.style.RelativeSizeSpan(.76f),label.length+1,length,0)
+   }
+   view.setTextSize(TypedValue.COMPLEX_UNIT_PX,26*scale);view.maxLines=2;view.ellipsize=android.text.TextUtils.TruncateAt.END
   }
   wireFocus();loadWatchNext()
- }
- private fun dailyPhotos(files:List<File>,slot:String,count:Int):List<File> {
-  val byId=files.associateBy{it.name.substringAfter('-')};val day=HomePhotoPolicy.localDay(System.currentTimeMillis())
-  val prefs=getSharedPreferences("home-daily",0)
-  fun saved(key:String)=prefs.getString(key,"").orEmpty().split(',').filter{it.isNotEmpty()}
-  val same=prefs.getLong("$slot-day",Long.MIN_VALUE)==day
-  val chosen=HomePhotoPolicy.choose(byId.keys.toList(),day,count,if(same)emptyList() else saved("$slot-ids"),if(same)saved("$slot-ids")else emptyList())
-  if(previewFiles==null && (!same || chosen!=saved("$slot-ids")))prefs.edit().putLong("$slot-day",day).putString("$slot-ids",chosen.joinToString(",")).apply()
-  return chosen.mapNotNull{byId[it]}
  }
  private val photoSignatures=mutableMapOf<String,IntArray>() // Only accessed by the image worker.
  private fun updateHomePhotos() {
@@ -305,30 +302,37 @@ class HomeActivity:Activity() {
     val pixels=IntArray(144);tiny.getPixels(pixels,0,12,0,0,12,12)
     if(tiny!==image)tiny.recycle();image.recycle();photoSignatures[cacheKey]=pixels;return pixels
    }
-   val chosen=mutableListOf<File>()
-   fun pick(pool:List<File>,slot:String,target:Float):File? {
-    val distinct=pool.filter{candidate->chosen.none{other->
-     candidate.name.substringAfter('-')==other.name.substringAfter('-') ||
-      signature(candidate)?.let{a->signature(other)?.let{b->HomePhotoSimilarity.similar(a,b)}}==true
-    }}
-    val ids=HomePhotoPolicy.fittingIds(distinct.associate{it.name to (ratios[it] ?: 0f)},target)
-    return dailyPhotos(distinct.filter{it.name in ids},"fit-$slot",1).firstOrNull()?.also{chosen.add(it)}
+   val day=HomePhotoPolicy.localDay(System.currentTimeMillis(),TimeZone.getTimeZone("Europe/London"))
+   val prefs=getSharedPreferences("home-daily",0)
+   val same=prefs.getLong("row-day",Long.MIN_VALUE)==day && prefs.getInt("row-version",0)==2
+   fun ids(key:String)=prefs.getString(key,"").orEmpty().split(',')
+   fun id(file:File)=file.name.substringAfter('-')
+   val saved=ids("row-ids")
+   val yesterday=if(same)ids("previous-row")else saved
+   val times=try{org.json.JSONObject(getSharedPreferences("state",0).getString("photoTimes","{}"))}catch(_:Exception){org.json.JSONObject()}
+   fun related(a:File,b:File):Boolean {
+    if(id(a)==id(b))return true
+    val ta=times.optLong(id(a));val tb=times.optLong(id(b))
+    if(ta>0 && tb>0 && kotlin.math.abs(ta-tb)<1800)return true
+    return signature(a)?.let{x->signature(b)?.let{y->HomePhotoSimilarity.similar(x,y)}}==true
    }
-   val narrow=contentPx(HomeLayout.photoWidth(1)).toFloat()/p(HomeLayout.PHOTO_H-12)
-   val favourite=pick(favs,"favourites",narrow)
-   val hero=pick(files.filter{it!=favourite},"hero",contentPx(HomeLayout.photoWidth(0)).toFloat()/p(HomeLayout.PHOTO_H))
-   val browse=pick(files.filter{it!=favourite && it!=hero},"browse",narrow)
-   val all=pick(files.filter{it!=favourite && it!=hero && it!=browse},"all",narrow)
-   val selected=listOf(hero,browse,favourite,all)
-   handler.post {if(token==epoch && page=="Home" && !isDestroyed)bindHomePhotos(selected,files.size)}
+   val selected=DailyHomeSelection.select(files.map(::id),favs.map(::id).toSet(),day,
+    if(same)saved else emptyList(),yesterday,
+    {a,b->related(files.first{ id(it)==a },files.first{ id(it)==b })},
+    {id,slot->val file=files.first{ id(it)==id };val target=if(slot>=2)245f/170f else HomeLayout.photoWidth(slot).toFloat()/HomeLayout.photoHeight(slot)
+     val ratio=ratios[file] ?: 1f;kotlin.math.abs(kotlin.math.ln(ratio.coerceAtLeast(.01f)/target)).toDouble()},
+    {a,b->val x=signature(files.first{id(it)==a});val y=signature(files.first{id(it)==b});if(x==null || y==null)1.0 else HomePhotoSimilarity.colourDistance(x,y)})
+   if(previewFiles==null)prefs.edit().putInt("row-version",2).putLong("row-day",day).putString("row-ids",selected.joinToString(","){it.orEmpty()}).putString("previous-row",yesterday.joinToString(",")).apply()
+   val selectedFiles=selected.map{key->files.firstOrNull{id(it)==key}}
+   handler.post {if(token==epoch && page=="Home" && !isDestroyed)bindHomePhotos(selectedFiles,files.size)}
   }
  }
  private fun bindHomePhotos(selected:List<File?>,photoCount:Int) {
   val favourite=selected[2]
-  val descriptions=listOf(if(photoCount==0)"No cached photos" else "Daily selection","Your collection",if(favourite==null)"No favourites yet" else "Saved by you","$photoCount cached photos")
+  val descriptions=listOf(if(photoCount==0)"No cached photos" else "Our favourite moments","All your family memories",if(favourite==null)"No favourites yet" else "Saved by you","$photoCount cached photos")
   photoSlots.forEachIndexed{i,slot->
-   slot.detail.text=descriptions[i];focusViews["photo:$i"]?.contentDescription=listOf("Recent","Browse photos","Favourites","All Photos")[i]+", "+descriptions[i]
-   val file=selected[i];slot.placeholder.visibility=if(file==null)View.VISIBLE else View.GONE
+   slot.detail.text=descriptions[i];focusViews["photo:$i"]?.contentDescription=listOf("Featured memory","Browse photos","Favourites","All Photos")[i]+", "+descriptions[i]
+   val file=selected[i];if(i==0)focusViews["photo:0"]?.setOnClickListener{file?.let{openPhoto(it)} ?: showPage("Photos")};slot.placeholder.visibility=if(file==null)View.VISIBLE else View.GONE
    if(slot.image.request(file?.name)) {
     if(file==null){slot.image.show(null,null);return@forEachIndexed}
     val token=epoch;val request=slot.image.requestVersion
@@ -336,7 +340,7 @@ class HomeActivity:Activity() {
      if(token!=epoch || slot.image.requestVersion!=request)return@execute
      val bitmap=try{PhotoDecoding.load(file,768,900)}catch(_:Exception){null}
      if(token!=epoch || slot.image.requestVersion!=request){bitmap?.recycle();return@execute}
-     val fill:Bitmap?=null
+     val fill:Bitmap?=bitmap?.let{OrientationPhotoView.softFill(it)}
      val face=bitmap?.let{HeroComposition.detect(it)}
      handler.post{if(token==epoch && slot.image.requestVersion==request && !isDestroyed){slot.image.show(bitmap,fill,face);slot.placeholder.visibility=if(bitmap==null)View.VISIBLE else View.GONE}else{bitmap?.recycle();fill?.recycle()}}
     }
@@ -466,7 +470,7 @@ class HomeActivity:Activity() {
   val groups=listOf(
    "TV & devices" to listOf(Triple("TV & inputs","Configure connected TV",{showPage("TV")}),Triple("Android settings","System settings",{safeStart(Intent(Settings.ACTION_SETTINGS))}),Triple("Android screensaver settings","Display and timeout",{safeStart(Intent(Settings.ACTION_DREAM_SETTINGS))})),
    "Connected services" to listOf(Triple("Connect Plex","Manage your media server",{safeStart(Intent(this,PlexConnectActivity::class.java))}),Triple("Open Projectivy","Launch your TV interface",{launchPackage("com.spocky.projengmenu")}),Triple("Photo connection settings","Synology and album access",{safeStart(Intent(this,SettingsActivity::class.java))})).filter{it.first!="Open Projectivy" || packageManager.getLeanbackLaunchIntentForPackage("com.spocky.projengmenu")!=null},
-   "Personalisation" to listOf(Triple("Photo screensaver","Family photos and timing",{safeStart(Intent(this,DreamSettingsActivity::class.java))}),Triple("Status & backup","Connections and local preferences",{safeStart(Intent(this,MaintenanceActivity::class.java))}),Triple("Restore hidden videos","${HomeDismissals.count(this)} hidden from Home",{restoreHiddenVideos()})))
+   "Personalisation" to listOf(Triple("Photo screensaver","Family photos and timing",{safeStart(Intent(this,DreamSettingsActivity::class.java))}),Triple("Status & backup","Connections and local preferences",{safeStart(Intent(this,MaintenanceActivity::class.java))}),Triple("Restore hidden videos","${HomeDismissals.count(this)} hidden from Home",{restoreHiddenVideos()}),Triple("Start screensaver","Show family memories now",{startScreensaver()})))
   val controls=mutableMapOf<Pair<Int,Int>,View>()
   groups.forEachIndexed{col,(title,entries)->place(text(title,26),244+col*554,316,530,48);entries.forEachIndexed{row,(label,detail,action)->val v=tile(label+"\n"+detail,action).apply{setTextSize(TypedValue.COMPLEX_UNIT_PX,23*scale);maxLines=3;val copy=android.text.SpannableString(text);val start=label.length+1;copy.setSpan(android.text.style.AbsoluteSizeSpan(p(20)),start,copy.length,0);text=copy};controls[col to row]=v;place(v,244+col*554,382+row*148,530,126)}}
   val navId=focusViews["nav:7"]!!.id
@@ -543,7 +547,7 @@ class HomeActivity:Activity() {
   if(force!=null){
    val token=epoch
    feedWorker.execute{
-    val available=if(previewFiles!=null)emptyList()else WatchNextReader.read(this,force){native->handler.post{if(feedActive && token==epoch && page=="Home" && !feedState.hasPending)applyWatchItems(native)}}
+    val available=if(previewFiles!=null)previewWatch.orEmpty()else WatchNextReader.read(this,force){native->handler.post{if(feedActive && token==epoch && page=="Home" && !feedState.hasPending)applyWatchItems(native)}}
     handler.post{
      val current=feedState.finish()
      if(current && feedActive && token==epoch && page=="Home"){
@@ -562,10 +566,10 @@ class HomeActivity:Activity() {
  private fun applyWatchItems(source:List<WatchItem>){
   availableWatchItems=source
   val available=source.filterNot{HomeDismissals.hidden(this,it) || (it.owner=="com.google.android.youtube.tv" && HomeDismissalPolicy.completed(it.position,it.duration))}
-  // Give Plex three of five slots when its first three include a real next episode.
+  // Preserve provider order and next-episode priority within the mixed feed.
   val firstOwner=if(available.filter{it.owner=="com.plexapp.android"}.take(3).any{it.nextEpisode})"com.plexapp.android"else null
   val ordered=SourceMixPolicy.indices(available.map{it.owner},available.size,firstOwner).map{available[it]}
-  currentWatchItems=ordered;val items=ordered.take(5)
+  currentWatchItems=ordered;val items=ordered.take(4)
   val signature=items.joinToString("|"){it.stableKey+it.title+it.position+it.duration+it.art+it.engagedAtMillis+it.nextEpisode}
   if(page=="Home")renderWatchItems(items,signature)
   if(previewFiles==null)getSharedPreferences("feed-audit",0).edit().putInt("visiblePlex",items.count{it.owner=="com.plexapp.android"}).putInt("visibleYouTube",items.count{it.owner=="com.google.android.youtube.tv"}).apply()
@@ -580,9 +584,9 @@ class HomeActivity:Activity() {
   fun detach(v:View){if(v is ImageView)v.setImageDrawable(null);if(v is ViewGroup)for(i in 0 until v.childCount)detach(v.getChildAt(i))}
   detach(mediaHost);mediaHost.removeAllViews();mediaBitmaps.forEach{if(!it.isRecycled)it.recycle()};mediaBitmaps.clear();focusViews.keys.filter{it.startsWith("media:")}.toList().forEach{focusViews.remove(it)}
   mediaHeading?.text="Continue Watching  ›"
-  fun placeCard(card:View,i:Int){focusViews["media:$i"]=card;mediaHost.addView(card,FrameLayout.LayoutParams(contentPx(HomeLayout.MEDIA_W),p(HomeLayout.MEDIA_H)).apply{leftMargin=contentPx(i*333)})}
+  fun placeCard(card:View,i:Int){focusViews["media:$i"]=card;mediaHost.addView(card,FrameLayout.LayoutParams(contentPx(HomeLayout.MEDIA_W),p(HomeLayout.MEDIA_H)).apply{leftMargin=contentPx(i*416)})}
   if(items.isEmpty()) {
-   val message=if(signature=="loading")"Loading Continue Watching…" else "No continue watching items available. Open Plex or YouTube below."
+   val message=if(signature=="loading")"Loading Continue Watching…" else "No continue watching items available. Open Plex or YouTube above."
    mediaHost.addView(text(message,27).apply{setTextColor(Color.rgb(185,204,218));contentDescription=message},FrameLayout.LayoutParams(-1,p(90)).apply{topMargin=p(30)})
   } else items.forEachIndexed{i,item->
    val remaining=if(item.nextEpisode)"Next episode"else if(item.duration>0 && item.position>=0 && item.position<item.duration)"${(item.duration-item.position+59999)/60000} min left"else ""

@@ -61,9 +61,11 @@ object HomePhotoPolicy {
 }
 
 object HomeLayout {
- const val LEFT=244;const val RIGHT=1888;const val PHOTO_Y=244;const val PHOTO_W=396;const val PHOTO_H=362;const val GAP=20
- const val MEDIA_HEADING_Y=624;const val MEDIA_Y=694;const val MEDIA_W=312;const val MEDIA_H=200;const val DOCK_Y=924;const val DOCK_H=100
- fun photoWidth(index:Int)=if(index==0)570 else 338
- fun photoX(index:Int)=LEFT+if(index==0)0 else 590+(index-1)*358
+ const val LEFT=244;const val RIGHT=1888;const val PHOTO_Y=244;const val PHOTO_W=396;const val PHOTO_H=338;const val GAP=20
+ const val MEDIA_HEADING_Y=764;const val MEDIA_Y=824;const val MEDIA_W=396;const val MEDIA_H=223;const val DOCK_Y=654;const val DOCK_H=100
+ fun photoWidth(index:Int)=when(index){0->666;1->492;else->446}
+ fun photoX(index:Int)=when(index){0->LEFT;1->930;else->1442}
+ fun photoY(index:Int)=if(index==3)423 else PHOTO_Y
+ fun photoHeight(index:Int)=if(index<2)PHOTO_H else 159
  fun scale(width:Int,height:Int)=min(width/1920f,height/1080f)
 }

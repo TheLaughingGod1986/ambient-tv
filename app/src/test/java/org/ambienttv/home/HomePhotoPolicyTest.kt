@@ -28,9 +28,9 @@ class HomePhotoPolicyTest {
   assertEquals(HomePhotoPolicy.frame(900,1600,510,390),HomePhotoPolicy.featureFrame(900,1600,510,390,null))
  }
  @Test fun heroAndThreeCompanionsKeepTheOriginalRowBounds() {
-  assertTrue(HomeLayout.photoWidth(0)>HomeLayout.photoWidth(1)*1.4f)
+  assertTrue(HomeLayout.photoWidth(0)>HomeLayout.photoWidth(1)*1.3f)
   assertEquals(HomeLayout.RIGHT,HomeLayout.photoX(3)+HomeLayout.photoWidth(3))
-  for(i in 1..3)assertEquals(20,HomeLayout.photoX(i)-HomeLayout.photoX(i-1)-HomeLayout.photoWidth(i-1))
+  for(i in 1..2)assertEquals(20,HomeLayout.photoX(i)-HomeLayout.photoX(i-1)-HomeLayout.photoWidth(i-1))
  }
  @Test fun portraitsSquareAndPanoramaKeepTheirEntireImage() {
   for((w,h) in listOf(900 to 1600,900 to 1200,900 to 900,3200 to 600)) {
@@ -67,14 +67,14 @@ class HomePhotoPolicyTest {
   assertEquals(day("2026-10-25T00:30:00Z"),day("2026-10-25T01:30:00Z"))
   assertEquals(day("2026-10-25T22:59:59Z")+1,day("2026-10-25T23:00:00Z"))
  }
- @Test fun allFourPhotosFiveVideosAndFiveDockTargetsFitAtEveryTvSize() {
+ @Test fun allPhotosFourVideosAndThreeQuickActionsFitAtEveryTvSize() {
   for((width,height) in listOf(1280 to 720,1920 to 1080,3840 to 2160)) {
    val scale=HomeLayout.scale(width,height)
    assertTrue((HomeLayout.LEFT+3*(HomeLayout.PHOTO_W+HomeLayout.GAP)+HomeLayout.PHOTO_W)*scale<=width-20*scale)
-   assertTrue((HomeLayout.LEFT+4*333+HomeLayout.MEDIA_W)*scale<=width-20*scale)
+   assertTrue((HomeLayout.LEFT+3*416+HomeLayout.MEDIA_W)*scale<=width-20*scale)
    assertTrue((HomeLayout.PHOTO_Y+HomeLayout.PHOTO_H+16)*scale<=HomeLayout.MEDIA_HEADING_Y*scale)
-   assertTrue((HomeLayout.MEDIA_HEADING_Y+62+8)*scale<=HomeLayout.MEDIA_Y*scale)
-   assertTrue((HomeLayout.MEDIA_Y+HomeLayout.MEDIA_H)*scale<HomeLayout.DOCK_Y*scale)
+   assertTrue((HomeLayout.MEDIA_HEADING_Y+60)*scale<=HomeLayout.MEDIA_Y*scale)
+   assertTrue((HomeLayout.DOCK_Y+HomeLayout.DOCK_H)*scale<HomeLayout.MEDIA_HEADING_Y*scale)
    assertTrue((HomeLayout.DOCK_Y+HomeLayout.DOCK_H)*scale<=height-32*scale)
   }
  }

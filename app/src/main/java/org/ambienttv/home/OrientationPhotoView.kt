@@ -32,7 +32,7 @@ internal class OrientationPhotoView(c:Context,private val homePolish:Boolean=fal
  override fun onDraw(c:Canvas) {
   super.onDraw(c);c.drawColor(Color.rgb(18,35,49))
   val image=photo ?: return
-  if(!homePolish)fill?.let{blur->
+  fill?.let{blur->
    val scale=maxOf(width.toFloat()/blur.width,height.toFloat()/blur.height)
    val w=blur.width*scale;val h=blur.height*scale
    paint.alpha=if(homePolish)105 else 150;c.drawBitmap(blur,null,RectF((width-w)/2,(height-h)/2,(width+w)/2,(height+h)/2),paint);paint.alpha=255

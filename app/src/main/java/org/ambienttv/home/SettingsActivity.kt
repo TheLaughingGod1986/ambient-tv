@@ -107,7 +107,7 @@ class SettingsActivity : Activity() {
   }
   label("Enter your own NAS address. HTTPS with a trusted certificate is recommended.",18f)
   button("Use demo photos") { AppPreferences.setDemo(this,true); status.text="Demo photos enabled. Your accounts have not been changed." }
-  button("Refresh photos") { Photos.refresh(applicationContext,true) { message -> runOnUiThread { status.text=message } } }
+  button("Refresh photos") { getSharedPreferences("home-daily",0).edit().putLong("row-day",Long.MIN_VALUE).apply(); Photos.refresh(applicationContext,true) { message -> runOnUiThread { status.text=message } } }
   button("Disconnect and erase this app’s cached photos") {
    if(!signIn.isEnabled) { status.text="Wait for sign-in to finish."; return@button }
    try {
