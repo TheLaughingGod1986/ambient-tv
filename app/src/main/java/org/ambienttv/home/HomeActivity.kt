@@ -99,6 +99,7 @@ class HomeActivity:Activity() {
   }}
   fun frame(width:Int){val lp=sidebarPanel.layoutParams;lp.width=width;sidebarPanel.layoutParams=lp
    val amount=((width-p(96)).toFloat()/p(fullWidth-96).coerceAtLeast(1)).coerceIn(0f,1f)
+   sidebarPanel.setBackgroundColor(Color.argb((255-35*amount).toInt(),3,13,25))
    sidebarNames.indices.forEach{i->focusViews["nav:$i"]?.let{v->val n=v.layoutParams;n.width=(p(64)+(p(navWidth)-p(64))*amount).toInt();v.layoutParams=n}}
   }
   val motion=Settings.Global.getFloat(contentResolver,Settings.Global.ANIMATOR_DURATION_SCALE,1f)>0f
