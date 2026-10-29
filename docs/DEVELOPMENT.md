@@ -102,3 +102,21 @@ matching navy controls while retaining favourite and framing actions.
 `wireGrid` registers secondary controls with the regression focus/bounds probe.
 Emulator checks cover 1080p and 720p, but cannot establish authenticated service
 availability or native installed-app playback on a household TV.
+
+
+## Responsiveness
+
+Home reuses its wallpaper view across page changes instead of decoding the same
+resource on every navigation. Daily selection is memoized by local day, cache
+file metadata, favourites and refresh state; unchanged minute ticks skip analysis.
+Dimension metadata is cached separately. Cached files remain the offline source.
+Plex catalog reads have a separate executor from image decoding. Page changes
+discard queued obsolete work, with generation checks on running jobs. The photo
+viewer drops queued intermediate frames during rapid navigation, hides controls
+after five seconds and consumes the first OK used to reveal them.
+
+TvRegression checks the unchanged-photo fast path, viewer hide/reveal, browsing,
+Back and restored Home focus at 1080p and 720p. These do not measure Sony-wide
+latency or establish NAS availability. On API errors 102/104, Synology requests
+advertised API routing/version information and retries only a validated webapi
+CGI path. Person-membership validation and cached fallback remain required.

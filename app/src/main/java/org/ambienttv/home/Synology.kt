@@ -19,10 +19,10 @@ class Synology(val base: String, private val sid: String = "") {
    return uri.toString()
   }
  }
- private fun connection(params: Map<String, String>, get: Boolean=false): HttpURLConnection {
+ private fun connection(params: Map<String, String>, get: Boolean=false,path:String="entry.cgi"): HttpURLConnection {
   val all = if(sid.isEmpty() || get) params else params + ("_sid" to sid)
   val body = all.entries.joinToString("&") { URLEncoder.encode(it.key,"UTF-8") + "=" + URLEncoder.encode(it.value,"UTF-8") }
-  val conn = URL("$base/webapi/entry.cgi" + if(get) "?$body" else "").openConnection() as HttpURLConnection
+  val conn = URL("$base/webapi/${SynologyApiPolicy.path(path)}" + if(get) "?$body" else "").openConnection() as HttpURLConnection
   conn.requestMethod = if(get) "GET" else "POST"; conn.doOutput = !get; conn.instanceFollowRedirects = false
   conn.connectTimeout = 5000; conn.readTimeout = 8000
   if(sid.isNotEmpty()) conn.setRequestProperty("Cookie", "id=$sid")
@@ -33,8 +33,19 @@ class Synology(val base: String, private val sid: String = "") {
   return conn
  }
 
- fun call(api: String, method: String, params: Map<String,String> = emptyMap(), version: Int = 1): JSONObject {
-  val conn = connection(params + mapOf("api" to api, "method" to method, "version" to "$version"))
+ fun call(api:String,method:String,params:Map<String,String> = emptyMap(),version:Int=1):JSONObject {
+  try{return request(api,method,params,version,"entry.cgi")}
+  catch(e:ApiFailure){
+   if(api=="SYNO.API.Info" || e.code !in listOf(102,104))throw e
+   val info=request("SYNO.API.Info","query",mapOf("query" to api),1,"entry.cgi").optJSONObject(api) ?: throw e
+   val path=SynologyApiPolicy.path(info.getString("path"))
+   val supported=SynologyApiPolicy.version(version,info.getInt("minVersion"),info.getInt("maxVersion"))
+   if(path=="entry.cgi" && supported==version)throw e
+   return request(api,method,params,supported,path)
+  }
+ }
+ private fun request(api:String,method:String,params:Map<String,String>,version:Int,path:String):JSONObject {
+  val conn=connection(params+mapOf("api" to api,"method" to method,"version" to "$version"),path=path)
   try {
    if(conn.responseCode != 200) throw HttpFailure(conn.responseCode)
    val bytes = conn.inputStream.use { it.readBytesBounded(2 * 1024 * 1024) }

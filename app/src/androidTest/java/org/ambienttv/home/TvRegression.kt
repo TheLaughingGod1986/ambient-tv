@@ -31,6 +31,11 @@ class TvRegression:Instrumentation(){
    fun capture(name:String){main{val content=h.findViewById<android.view.ViewGroup>(android.R.id.content).getChildAt(0);val image=Bitmap.createBitmap(w,height,Bitmap.Config.ARGB_8888);content.draw(Canvas(image));File(directory,"$name.png").outputStream().use{image.compress(Bitmap.CompressFormat.PNG,100,it)};image.recycle()}}
    c.getSharedPreferences("home-ui",0).edit().putBoolean("compactSidebar",true).commit()
    main{h.showPageForTest("Home")};waitFor{h.readyForTest() && h.photoReadyForTest()}
+   stage="unchanged daily photo fast path"
+   main{h.refreshDecorForTest()};waitFor{h.photoWorkIdleForTest()}
+   var runs=0;main{runs=h.photoSelectionRunsForTest()}
+   repeat(3){main{h.refreshDecorForTest()};waitFor{h.photoWorkIdleForTest()}}
+   main{check(h.photoSelectionRunsForTest()==runs)}
    stage="directional navigation"
    main{h.focusForTest("nav:0")};waitFor{h.sidebarExpandedForTest()};SystemClock.sleep(250);capture("sidebar-expanded");var photoBounds=android.graphics.Rect();main{photoBounds=h.boundsForTest().getValue("photo:0");check(kotlin.math.abs(photoBounds.left-w*HomeLayout.COMPACT_LEFT/1920f)<2f);check(photoBounds.width()>h.boundsForTest().getValue("photo:1").width()*1.3f)};sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_RIGHT);waitForIdleSync();waitFor{h.focusKeyForTest()=="photo:0" && !h.sidebarExpandedForTest()};main{check(h.boundsForTest().getValue("photo:0")==photoBounds)};SystemClock.sleep(250);capture("sidebar-compact")
    for(i in 1..2){sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_RIGHT);waitForIdleSync();waitFor{h.focusKeyForTest()=="photo:$i"}}
@@ -59,6 +64,14 @@ class TvRegression:Instrumentation(){
     main{check(h.boundsForTest().values.all{it.left>=0 && it.top>=0 && it.right<=w && it.bottom<=height})}
     capture(page.replace(' ','-'))
    }
+   stage="photo viewer and restored Home focus"
+   main{h.showPageForTest("Home");h.focusForTest("footer:1")}
+   val viewer=startActivitySync(Intent(c,PhotoViewerActivity::class.java).putExtra("photo",files.first().name).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as PhotoViewerActivity
+   waitFor{viewer.controlsVisibleForTest()}
+   waitFor{!viewer.controlsVisibleForTest()}
+   sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_CENTER);waitFor{viewer.controlsVisibleForTest()}
+   sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_RIGHT);waitFor{viewer.indexForTest()==1}
+   sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);waitFor{h.hasWindowFocus() && h.focusKeyForTest()=="footer:1"}
    stage="backup"
    val old=PreferenceBackup.snapshot(c)
    try{val sample=PreferenceSnapshot("classic",2,"full",mapOf("demo.jpg" to "top"),setOf("demo.jpg"));PreferenceBackup.restore(c,BackupPolicy.decode(BackupPolicy.encode(sample)));check(PreferenceBackup.snapshot(c)==sample)}finally{PreferenceBackup.restore(c,old)}

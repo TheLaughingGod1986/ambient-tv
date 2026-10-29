@@ -40,10 +40,14 @@ class HomeActivity:Activity() {
 
  internal fun readyForTest()=photoSlots.size==4 && focusViews.containsKey("footer:2")
  internal fun photoReadyForTest()=photoSlots.count{it.image.hasPhoto}>=minOf(3,photoFiles().size)
+ internal fun photoWorkIdleForTest()=worker.activeCount==0 && worker.queue.isEmpty()
+ internal fun photoSelectionRunsForTest()=photoSelectionRuns
+ @Volatile private var photoSelectionRuns=0
  internal fun refreshDecorForTest(){updateHeader();updateHomePhotos()}
  internal fun boundsForTest()=focusViews.mapValues{(_,view)->Rect().also{view.getDrawingRect(it);root.offsetDescendantRectToMyCoords(view,it)}}
  private val focusViews=linkedMapOf<String,View>()
- private val worker=Executors.newSingleThreadExecutor()
+ private val worker=java.util.concurrent.ThreadPoolExecutor(1,1,0L,java.util.concurrent.TimeUnit.MILLISECONDS,java.util.concurrent.LinkedBlockingQueue<Runnable>())
+ private val catalogWorker=java.util.concurrent.ThreadPoolExecutor(1,1,0L,java.util.concurrent.TimeUnit.MILLISECONDS,java.util.concurrent.LinkedBlockingQueue<Runnable>())
  private val feedWorker=Executors.newSingleThreadExecutor()
  private val feedState=FeedRefreshState()
  private var feedActive=false
@@ -137,16 +141,16 @@ class HomeActivity:Activity() {
   refreshFeedOnReturn();handler.removeCallbacks(feedPoll);handler.postDelayed(feedPoll,60000)
   handler.removeCallbacks(tick);handler.post(tick);if(previewFiles==null)WeatherStore.refresh(applicationContext)
  }
- override fun onPause() {feedActive=false;feedState.pause();handler.removeCallbacks(feedRead);handler.removeCallbacks(feedPoll);handler.removeCallbacks(feedReturnRetry);handler.removeCallbacks(feedReturnFinalRetry)
+ override fun onPause() {rememberFocus();feedActive=false;feedState.pause();handler.removeCallbacks(feedRead);handler.removeCallbacks(feedPoll);handler.removeCallbacks(feedReturnRetry);handler.removeCallbacks(feedReturnFinalRetry)
   if(observingFeed){contentResolver.unregisterContentObserver(feedObserver);observingFeed=false};handler.removeCallbacks(tick);super.onPause() }
  override fun onTrimMemory(level:Int) {
   super.onTrimMemory(level)
   if(level>=android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW)PlexFeed.trimArtwork()
  }
  override fun onLowMemory(){super.onLowMemory();PlexFeed.trimArtwork()}
- override fun onDestroy() { unregisterReceiver(homePress);epoch++;handler.removeCallbacksAndMessages(null);worker.shutdownNow();feedWorker.shutdownNow();if(::root.isInitialized)clearPage();super.onDestroy() }
+ override fun onDestroy() { unregisterReceiver(homePress);epoch++;handler.removeCallbacksAndMessages(null);worker.shutdownNow();catalogWorker.shutdownNow();feedWorker.shutdownNow();if(::root.isInitialized)clearPage();super.onDestroy() }
  private fun clearPage() {
-  sidebarAnimation?.cancel();sidebarExpanded=null;epoch++;mediaEpoch++;focusViews.clear();photoSlots.clear();mediaSignature=""
+  sidebarAnimation?.cancel();sidebarExpanded=null;epoch++;mediaEpoch++;worker.queue.clear();catalogWorker.queue.clear();focusViews.clear();photoSlots.clear();mediaSignature=""
   mediaBitmaps.forEach{if(!it.isRecycled)it.recycle()};mediaBitmaps.clear()
   fun detach(view:View){if(view is OrientationPhotoView)view.clear();if(view is ImageView)view.setImageDrawable(null);if(view is android.view.ViewGroup)for(i in 0 until view.childCount)detach(view.getChildAt(i))}
   detach(root);root.removeAllViews();bitmaps.forEach {if(!it.isRecycled)it.recycle()};bitmaps.clear()
@@ -169,10 +173,15 @@ class HomeActivity:Activity() {
   if(focused)intArrayOf(Color.rgb(235,244,253),Color.rgb(208,226,246))else intArrayOf(Color.rgb(25,61,105),Color.rgb(13,39,72))).apply{
   cornerRadius=14*scale;setStroke(maxOf(1,p(if(focused)3 else 1)),if(focused)Color.WHITE else Color.rgb(82,121,171))
  }
+ private val pageFocus=mutableMapOf<String,String>()
+ private fun rememberFocus(){focusViews.entries.firstOrNull{it.value.hasFocus() && !it.key.startsWith("nav:")}?.let{pageFocus[page]=it.key}}
+ private fun restoreFocus(){val key=pageFocus[page] ?: return;focusViews[key]?.requestFocus()}
  private fun showPage(name:String) {
+  rememberFocus()
   if(name!=page && name in listOf("Movies","TV Shows","Anime")){catalogPageIndex=0;catalogFocusAfterLoad=null}
   compactLayout=getSharedPreferences("home-ui",0).getBoolean("compactSidebar",false);page=name;clearPage()
-  backdrop=HomeBackdropView(this,true);place(backdrop,0,0,1920,1080)
+  if(!::backdrop.isInitialized)backdrop=HomeBackdropView(this,true)
+  place(backdrop,0,0,1920,1080)
   header=HomeWeatherView(this);place(header,244,38,600,110)
   clock=text("",38).apply { gravity=Gravity.RIGHT or Gravity.CENTER_VERTICAL };place(clock,1430,40,430,118);updateHeader()
   val names=sidebarNames
@@ -211,7 +220,7 @@ class HomeActivity:Activity() {
   }
   sidebarPanel=View(this).apply{elevation=p(8).toFloat();isClickable=true;setBackgroundColor(Color.rgb(3,13,25));importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO};place(sidebarPanel,0,0,96,1080)
   focusViews.filterKeys{it.startsWith("nav:")}.values.forEach{it.elevation=p(9).toFloat();it.bringToFront()}
-  (first ?: focusViews[if(name=="TV")"nav:7"else"nav:0"])?.requestFocus();updateSidebar()
+  (first ?: focusViews[if(name=="TV")"nav:7"else"nav:0"])?.requestFocus();restoreFocus();updateSidebar()
  }
  private fun heading(value:String) { place(text(value,46).apply{typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)},244,174,1500,65) }
  private fun updateHeader() {
@@ -283,17 +292,32 @@ class HomeActivity:Activity() {
   }
   wireFocus();loadWatchNext()
  }
+ private var photoSelectionKey=""
+ private var selectedPhotoIds=emptyList<String?>()
+ private var photoBoundEpoch=-1
+ private val photoRatios=mutableMapOf<String,Float>()
  private val photoSignatures=mutableMapOf<String,IntArray>() // Only accessed by the image worker.
  private fun updateHomePhotos() {
   if(page!="Home" || photoSlots.size!=4)return
   val files=photoFiles();val favs=favourites();val token=epoch
   worker.execute {
+   if(token!=epoch)return@execute
+   val dayKey=HomePhotoPolicy.localDay(System.currentTimeMillis(),TimeZone.getTimeZone("Europe/London"))
+   val dailyPrefs=getSharedPreferences("home-daily",0)
+   val selectionKey="$dayKey:${dailyPrefs.getLong("row-day",Long.MIN_VALUE)}:${dailyPrefs.getInt("row-version",0)}:"+files.joinToString{it.name+":"+it.length()+":"+it.lastModified()}+":"+favs.joinToString{it.name}
+   if(selectionKey==photoSelectionKey){
+    if(photoBoundEpoch!=token)handler.post{if(token==epoch && page=="Home"){bindHomePhotos(selectedPhotoIds.map{id->files.firstOrNull{it.name.substringAfter('-')==id}},files.size);photoBoundEpoch=token}}
+    return@execute
+   }
+   photoSelectionRuns++
    // Header-only decoding is bounded by the cached pool and never blocks TV focus/clock updates.
-   val ratios=files.associateWith { file->
+   fun metadataKey(file:File)="${file.path}:${file.length()}:${file.lastModified()}"
+   photoRatios.keys.retainAll(files.map(::metadataKey).toSet())
+   val ratios=files.associateWith { file->photoRatios.getOrPut(metadataKey(file)){
     val bounds=android.graphics.BitmapFactory.Options().apply{inJustDecodeBounds=true}
     android.graphics.BitmapFactory.decodeFile(file.path,bounds)
     if(bounds.outWidth>0 && bounds.outHeight>0)bounds.outWidth.toFloat()/bounds.outHeight else 0f
-   }
+   }}
    fun key(file:File)="${file.path}:${file.length()}:${file.lastModified()}"
    val activeKeys=files.map{key(it)}.toSet();photoSignatures.keys.retainAll(activeKeys)
    fun signature(file:File):IntArray? {
@@ -323,9 +347,11 @@ class HomeActivity:Activity() {
     {id,slot->val file=files.first{ id(it)==id };val target=if(slot>=2)245f/170f else HomeLayout.photoWidth(slot).toFloat()/HomeLayout.photoHeight(slot)
      val ratio=ratios[file] ?: 1f;kotlin.math.abs(kotlin.math.ln(ratio.coerceAtLeast(.01f)/target)).toDouble()},
     {a,b->val x=signature(files.first{id(it)==a});val y=signature(files.first{id(it)==b});if(x==null || y==null)1.0 else HomePhotoSimilarity.colourDistance(x,y)})
+   if(token!=epoch)return@execute
+   photoSelectionKey=selectionKey;selectedPhotoIds=selected
    if(previewFiles==null)prefs.edit().putInt("row-version",7).putLong("row-day",day).putString("row-ids",selected.joinToString(","){it.orEmpty()}).putString("previous-row",yesterday.joinToString(",")).apply()
    val selectedFiles=selected.map{key->files.firstOrNull{id(it)==key}}
-   handler.post {if(token==epoch && page=="Home" && !isDestroyed)bindHomePhotos(selectedFiles,files.size)}
+   handler.post {if(token==epoch && page=="Home" && !isDestroyed){bindHomePhotos(selectedFiles,files.size);photoBoundEpoch=token}}
   }
  }
  private fun bindHomePhotos(selected:List<File?>,photoCount:Int) {
@@ -389,7 +415,8 @@ class HomeActivity:Activity() {
   heading(category)
   val loading=text("Loading your Plex library…",28);place(loading,244,248,1500,68)
   val token=epoch
-  worker.execute{
+  catalogWorker.execute{
+   if(token!=epoch)return@execute
    try{
     val result=PlexFeed.catalog(this,category,index)
     handler.post{
@@ -416,6 +443,7 @@ class HomeActivity:Activity() {
      pageButton("Refresh",896){showCatalogPage(category,index)}
      wireGrid(gridControls,5,pager)
      pager.forEachIndexed{i,v->v.nextFocusUpId=gridControls.lastOrNull()?.id ?: navId;v.nextFocusLeftId=if(i==0)navId else pager[i-1].id;v.nextFocusRightId=if(i==pager.lastIndex)v.id else pager[i+1].id;v.nextFocusDownId=v.id}
+     restoreFocus()
      val desired=catalogFocusAfterLoad;catalogFocusAfterLoad=null
      if(desired!=null && currentFocus?.id==navId && hasWindowFocus()){
       val target=if(desired=="@first")gridControls.firstOrNull() ?: pager.firstOrNull()else (gridControls+pager).firstOrNull{it.contentDescription?.toString()==desired}
