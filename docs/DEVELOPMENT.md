@@ -107,7 +107,8 @@ availability or native installed-app playback on a household TV.
 ## Responsiveness
 
 Home reuses its wallpaper view across page changes instead of decoding the same
-resource on every navigation. Daily selection is memoized by local day, cache
+resource on every navigation. Initial wallpaper decoding runs off the UI thread
+so it does not block the first focusable frame. Daily selection is memoized by local day, cache
 file metadata, favourites and refresh state; unchanged minute ticks skip analysis.
 Dimension metadata is cached separately. Cached files remain the offline source.
 Plex catalog reads have a separate executor from image decoding. Page changes
