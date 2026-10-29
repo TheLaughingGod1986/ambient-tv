@@ -8,8 +8,11 @@ object DailyHomeSelection {
    val pool=all.filter{(slot!=2 || it in favourites) && result.filterNotNull().none{chosen->related(it,chosen)}}
    // Wide hero cards must not sacrifice image fit for colour diversity or novelty.
    // Retain the best available orientations even when the cache is mostly portraits.
-   val bestFit=pool.minOfOrNull{fit(it,slot)} ?: 0.0
-   val oriented=if(slot<2)pool.filter{fit(it,slot)<=bestFit+.10}else pool
+   val hero=result[0]
+   val mostDifferent=if(slot==1 && hero!=null)pool.maxOfOrNull{distance(it,hero)}else null
+   val distinctScenes=if(mostDifferent!=null)pool.filter{distance(it,hero!!) >= mostDifferent-.10}else pool
+   val bestFit=distinctScenes.minOfOrNull{fit(it,slot)} ?: 0.0
+   val oriented=if(slot<2)distinctScenes.filter{fit(it,slot)<=bestFit+.10}else distinctScenes
    val retained=saved.getOrNull(slot)?.takeIf{it in oriented}
    val fresh=oriented.filter{candidate->previous.filter{it in all}.none{related(candidate,it)}}
    val candidates=if(fresh.isNotEmpty())fresh else oriented.filter{it !in previous}.ifEmpty{oriented}

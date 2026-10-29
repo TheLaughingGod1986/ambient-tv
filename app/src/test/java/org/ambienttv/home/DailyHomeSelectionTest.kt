@@ -11,5 +11,9 @@ class DailyHomeSelectionTest {
   val row=DailyHomeSelection.select(listOf("wide1","wide2","portrait1","portrait2"),emptySet(),4,emptyList(),listOf("wide1","wide2"),{a,b->a==b},{id,_->if(id.startsWith("wide"))0.0 else 1.0},{_,_->0.0})
   assertTrue(row[0]!!.startsWith("wide"));assertTrue(row[1]!!.startsWith("wide"));assertNotEquals(row[0],row[1])
  }
+ @Test fun browseChoosesADifferentSceneBeforeAspectFit(){
+  val row=DailyHomeSelection.select(listOf("hero","angle","different"),emptySet(),1,listOf("hero"),emptyList(),{a,b->a==b},{id,_->if(id=="different")1.0 else 0.0},{a,b->if(setOf(a,b)==setOf("hero","angle"))0.5 else 1.0})
+  assertEquals("hero",row[0]);assertEquals("different",row[1])
+ }
  @Test fun emptyFavouritesNeverUsesAnArbitraryPhoto(){assertNull(DailyHomeSelection.select(listOf("a","b"),emptySet(),1,emptyList(),emptyList(),{a,b->a==b},{_,_->0.0})[2])}
 }
