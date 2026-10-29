@@ -304,7 +304,7 @@ class HomeActivity:Activity() {
    }
    val day=HomePhotoPolicy.localDay(System.currentTimeMillis(),TimeZone.getTimeZone("Europe/London"))
    val prefs=getSharedPreferences("home-daily",0)
-   val same=prefs.getLong("row-day",Long.MIN_VALUE)==day && prefs.getInt("row-version",0)==2
+   val same=prefs.getLong("row-day",Long.MIN_VALUE)==day && prefs.getInt("row-version",0)==3
    fun ids(key:String)=prefs.getString(key,"").orEmpty().split(',')
    fun id(file:File)=file.name.substringAfter('-')
    val saved=ids("row-ids")
@@ -322,7 +322,7 @@ class HomeActivity:Activity() {
     {id,slot->val file=files.first{ id(it)==id };val target=if(slot>=2)245f/170f else HomeLayout.photoWidth(slot).toFloat()/HomeLayout.photoHeight(slot)
      val ratio=ratios[file] ?: 1f;kotlin.math.abs(kotlin.math.ln(ratio.coerceAtLeast(.01f)/target)).toDouble()},
     {a,b->val x=signature(files.first{id(it)==a});val y=signature(files.first{id(it)==b});if(x==null || y==null)1.0 else HomePhotoSimilarity.colourDistance(x,y)})
-   if(previewFiles==null)prefs.edit().putInt("row-version",2).putLong("row-day",day).putString("row-ids",selected.joinToString(","){it.orEmpty()}).putString("previous-row",yesterday.joinToString(",")).apply()
+   if(previewFiles==null)prefs.edit().putInt("row-version",3).putLong("row-day",day).putString("row-ids",selected.joinToString(","){it.orEmpty()}).putString("previous-row",yesterday.joinToString(",")).apply()
    val selectedFiles=selected.map{key->files.firstOrNull{id(it)==key}}
    handler.post {if(token==epoch && page=="Home" && !isDestroyed)bindHomePhotos(selectedFiles,files.size)}
   }
