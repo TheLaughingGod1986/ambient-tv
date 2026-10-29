@@ -245,15 +245,15 @@ class HomeActivity:Activity() {
   for(i in titles.indices) {
    val card=ClippedPhotoCard(this,14*scale).apply{id=nextId++;isFocusable=true;isFocusableInTouchMode=true;isClickable=true;background=rounded(Color.rgb(17,35,49),false);foreground=photoOutline(false);clipToOutline=true;contentDescription=titles[i];setOnClickListener{actions[i]()};setOnFocusChangeListener{_,focus->foreground=photoOutline(focus)}}
    card.elevation=p(if(i==0)6 else 4).toFloat()
-   val image=OrientationPhotoView(this,true);card.addView(image,FrameLayout.LayoutParams(if(i<2)-1 else p(245),-1,Gravity.RIGHT))
+   val image=OrientationPhotoView(this,true);card.addView(image,FrameLayout.LayoutParams(if(i<2)-1 else p(300),-1,Gravity.RIGHT))
    val placeholder=ImageView(this).apply{setImageDrawable(HomeNavIcon(icons[i]).apply{setTint(Color.rgb(164,191,210))})};card.addView(placeholder,FrameLayout.LayoutParams(p(70),p(70),Gravity.CENTER).apply{bottomMargin=p(30)})
-   card.addView(View(this).apply{background=GradientDrawable(if(i<2)GradientDrawable.Orientation.TOP_BOTTOM else GradientDrawable.Orientation.RIGHT_LEFT,if(i<2)intArrayOf(Color.TRANSPARENT,Color.argb(242,4,10,18))else intArrayOf(Color.TRANSPARENT,Color.rgb(15,32,54),Color.rgb(15,32,54)))},FrameLayout.LayoutParams(-1,if(i<2)p(170)else -1,Gravity.BOTTOM))
+   card.addView(View(this).apply{background=GradientDrawable(if(i<2)GradientDrawable.Orientation.TOP_BOTTOM else GradientDrawable.Orientation.RIGHT_LEFT,if(i<2)intArrayOf(Color.TRANSPARENT,Color.argb(242,4,10,18))else intArrayOf(Color.TRANSPARENT,Color.argb(180,15,32,54),Color.rgb(15,32,54)))},FrameLayout.LayoutParams(-1,if(i<2)p(170)else -1,Gravity.BOTTOM))
    val caption=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL;setPadding(p(20),0,p(16),p(16))}
-   val icon=ImageView(this).apply{setImageDrawable(HomeNavIcon(icons[i]).apply{setTint(Color.WHITE)})};caption.addView(icon,LinearLayout.LayoutParams(p(30),p(30)).apply{rightMargin=p(12)})
+   val icon=ImageView(this).apply{setImageDrawable(HomeNavIcon(icons[i]).apply{setTint(if(i==2)Color.rgb(255,210,70)else Color.WHITE)})};caption.addView(icon,LinearLayout.LayoutParams(p(30),p(30)).apply{rightMargin=p(12)})
    val words=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
    words.addView(text(titles[i],26).apply{typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL);maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END})
    val detail=text("",18).apply{setTextColor(Color.rgb(204,216,228));maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END};words.addView(detail)
-   caption.addView(words,LinearLayout.LayoutParams(0,-2,1f));card.addView(caption,FrameLayout.LayoutParams(-1,p(94),if(i<2)Gravity.BOTTOM else Gravity.CENTER_VERTICAL))
+   caption.addView(words,LinearLayout.LayoutParams(0,-2,1f));caption.addView(text("›",44).apply{gravity=Gravity.CENTER;importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO},LinearLayout.LayoutParams(p(34),p(56)));card.addView(caption,FrameLayout.LayoutParams(-1,p(94),if(i<2)Gravity.BOTTOM else Gravity.CENTER_VERTICAL))
    photoSlots.add(PhotoSlot(image,detail,placeholder));focusViews["photo:$i"]=card
    place(card,HomeLayout.photoX(i),HomeLayout.photoY(i),HomeLayout.photoWidth(i),HomeLayout.photoHeight(i))
   }
@@ -264,15 +264,15 @@ class HomeActivity:Activity() {
   place(text("Quick access",32).apply{typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)},244,600,800,48)
   val footerActions=listOf<Pair<String,()->Unit>>(
    "YouTube" to {launchPackage("com.google.android.youtube.tv")},"Plex" to {launchPackage("com.plexapp.android")},
-   "Synology Photos" to {launchPackage("com.synology.projectkailash")})
+   "Photos" to {launchPackage("com.synology.projectkailash")})
   footerActions.forEachIndexed{i,(label,action)->
    val view=tile(label,action)
    val originalFocus=view.onFocusChangeListener
    view.background=dockBackground(i==0);if(i==0)view.setTextColor(Color.rgb(9,22,36));view.setOnFocusChangeListener{v,focused->originalFocus?.onFocusChange(v,focused);view.background=dockBackground(focused || i==0);if(i==0)view.setTextColor(Color.rgb(9,22,36));view.foreground=if(focused)photoOutline(true)else null}
    focusViews["footer:$i"]=view;place(view,244+i*555,HomeLayout.DOCK_Y,534,HomeLayout.DOCK_H)
    val icon=if(i<3)try{packageManager.getApplicationIcon(listOf("com.google.android.youtube.tv","com.plexapp.android","com.synology.projectkailash")[i])}catch(_:Exception){HomeNavIcon("Apps").apply{setTint(if(i==0)Color.rgb(9,22,36)else titleColor)}}else HomeNavIcon(if(i==3)"Apps" else "Photos").apply{setTint(titleColor)}
-   val longest=maxOf(icon.intrinsicWidth,icon.intrinsicHeight,1);icon.setBounds(0,0,p((42f*icon.intrinsicWidth.coerceAtLeast(1)/longest).toInt()),p((42f*icon.intrinsicHeight.coerceAtLeast(1)/longest).toInt()))
-   view.setPadding(p(18),p(8),p(12),p(8));view.compoundDrawablePadding=p(12);view.setCompoundDrawables(icon,null,null,null)
+   val longest=maxOf(icon.intrinsicWidth,icon.intrinsicHeight,1);icon.setBounds(0,0,p((64f*icon.intrinsicWidth.coerceAtLeast(1)/longest).toInt()),p((64f*icon.intrinsicHeight.coerceAtLeast(1)/longest).toInt()))
+   view.setPadding(p(18),p(8),p(12),p(8));view.compoundDrawablePadding=p(20);val chevron=ActionChevron().apply{setTint(if(i==0)Color.rgb(9,22,36)else titleColor);setBounds(0,0,p(24),p(30))};view.setCompoundDrawables(icon,null,chevron,null)
    val subtitle=listOf("Watch videos together","Movies & TV shows","Open Synology Photos")[i]
    view.text=android.text.SpannableString("$label\n$subtitle").apply{
     setSpan(android.text.style.StyleSpan(Typeface.BOLD),0,label.length,0)
