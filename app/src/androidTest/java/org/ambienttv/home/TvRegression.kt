@@ -72,6 +72,25 @@ class TvRegression:Instrumentation(){
    sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_CENTER);waitFor{viewer.controlsVisibleForTest()}
    sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_RIGHT);waitFor{viewer.indexForTest()==1}
    sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);waitFor{h.hasWindowFocus() && h.focusKeyForTest()=="footer:1"}
+   stage="overnight policy and persisted job"
+   val job=PhotoSync.job(c,1000,61000)
+   check(job.isPersisted && job.networkType==android.app.job.JobInfo.NETWORK_TYPE_ANY && job.minLatencyMillis==60000L)
+   if(!PhotoSyncPolicy.open(System.currentTimeMillis(),PhotoSync.zone(c))){
+    val oldDemo=AppPreferences.demo(c);val oldMode=PhotoSync.enabled(c);val attempt=c.getSharedPreferences("state",0).getLong("attemptAt",0)
+    try{
+     AppPreferences.setDemo(c,false);PhotoSync.setEnabled(c,true)
+     var response="";Photos.refresh(c,true){response=it}
+     check(response.contains("overnight"));check(c.getSharedPreferences("state",0).getLong("attemptAt",0)==attempt)
+     Vault(c).save("https://example.invalid","demo-session")
+     PhotoSync.schedule(c,true)
+     val scheduler=c.getSystemService(android.content.Context.JOB_SCHEDULER_SERVICE) as android.app.job.JobScheduler
+     check(scheduler.allPendingJobs.any{it.id==PhotoSync.JOB_ID && it.isPersisted})
+     val completed=PhotoSyncJob.completions
+     uiAutomation.executeShellCommand("cmd jobscheduler run -f org.ambienttv.home ${PhotoSync.JOB_ID}").use{android.os.ParcelFileDescriptor.AutoCloseInputStream(it).readBytes()}
+     waitFor{PhotoSyncJob.completions>completed}
+     check(c.getSharedPreferences("state",0).getLong("attemptAt",0)==attempt)
+    }finally{Vault(c).clear();AppPreferences.setDemo(c,oldDemo);PhotoSync.setEnabled(c,oldMode)}
+   }
    stage="backup"
    val old=PreferenceBackup.snapshot(c)
    try{val sample=PreferenceSnapshot("classic",2,"full",mapOf("demo.jpg" to "top"),setOf("demo.jpg"));PreferenceBackup.restore(c,BackupPolicy.decode(BackupPolicy.encode(sample)));check(PreferenceBackup.snapshot(c)==sample)}finally{PreferenceBackup.restore(c,old)}

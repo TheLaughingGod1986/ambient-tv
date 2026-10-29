@@ -121,3 +121,22 @@ Back and restored Home focus at 1080p and 720p. These do not measure Sony-wide
 latency or establish NAS availability. On API errors 102/104, Synology requests
 advertised API routing/version information and retries only a validated webapi
 CGI path. Person-membership validation and cached fallback remain required.
+
+## Overnight NAS availability
+
+Photo connection settings can restrict photo acquisition to an overnight NAS
+window. Use the NAS timezone, which may differ from the TV timezone. Automatic
+sync starts from 01:15 and new attempts stop at 05:45, leaving time before a
+06:00 NAS shutdown. JobScheduler requires a network, persists the job across
+reboots, and may defer execution in standby; a powered-off or force-stopped TV
+cannot be guaranteed to sync. No exact alarm or screen wake is requested.
+All photo acquisition, including manual refresh, respects the window when this
+mode is enabled. Daytime calls return local cache status without recording a
+failed NAS attempt. Turning the mode off restores ordinary refresh behaviour.
+Disconnect cancels the pending job. The public app leaves this option off until
+configured by its owner.
+
+Settings shows the last successful sync and current cached count. Daily Home
+rotation still uses Europe/London and stores at most eight daily rows locally,
+preferring scenes absent from that recent history when the pool permits. Photo
+IDs remain in private preferences and are not logged or uploaded.

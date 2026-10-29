@@ -17,6 +17,7 @@ import java.util.concurrent.Executors
 class SettingsActivity : Activity() {
  private val worker = Executors.newSingleThreadExecutor()
  private lateinit var status: TextView
+ private lateinit var syncDetails:TextView
  private lateinit var signIn: Button
  override fun onCreate(savedInstanceState: Bundle?) {
   super.onCreate(savedInstanceState)
@@ -87,7 +88,7 @@ class SettingsActivity : Activity() {
      AppPreferences.savePerson(applicationContext,selectedPerson)
      AppPreferences.setDemo(applicationContext,false)
      Vault(this).save(address,sid)
-     Photos.refresh(applicationContext,true) { message -> runOnUiThread { status.text=message; signIn.isEnabled=true } }
+     Photos.refresh(applicationContext,true) { message -> runOnUiThread { status.text=message;if(::syncDetails.isInitialized)syncDetails.text=PhotoSync.summary(this); signIn.isEnabled=true } }
     } catch(e: ApiFailure) { runOnUiThread {
      status.text=when(e.code) { 403 -> "MFA required. Re-enter password and current MFA code."
       404 -> "MFA code was rejected. Try the current code."
@@ -107,7 +108,12 @@ class SettingsActivity : Activity() {
   }
   label("Enter your own NAS address. HTTPS with a trusted certificate is recommended.",18f)
   button("Use demo photos") { AppPreferences.setDemo(this,true); status.text="Demo photos enabled. Your accounts have not been changed." }
-  button("Refresh photos") { getSharedPreferences("home-daily",0).edit().putLong("row-day",Long.MIN_VALUE).apply(); Photos.refresh(applicationContext,true) { message -> runOnUiThread { status.text=message } } }
+  val overnight=CheckBox(this).apply{text="NAS available overnight only (01:00–06:00 NAS time)";textSize=20f;setTextColor(Color.WHITE);isChecked=PhotoSync.enabled(this@SettingsActivity);content.addView(this)}
+  overnight.setOnCheckedChangeListener{_,checked->PhotoSync.setEnabled(this,checked);status.text=Photos.status(this);syncDetails.text=PhotoSync.summary(this)}
+  syncDetails=label(PhotoSync.summary(this),18f)
+  val nasZone=field("NAS timezone",PhotoSync.zone(this).id)
+  button("Save NAS refresh timezone"){try{PhotoSync.setZone(this,nasZone.text.toString().trim());syncDetails.text=PhotoSync.summary(this)}catch(_:IllegalArgumentException){status.text="Enter an IANA timezone, such as Europe/London or UTC."}}
+  button("Refresh photos") { getSharedPreferences("home-daily",0).edit().putLong("row-day",Long.MIN_VALUE).apply(); Photos.refresh(applicationContext,true) { message -> runOnUiThread { status.text=message;if(::syncDetails.isInitialized)syncDetails.text=PhotoSync.summary(this) } } }
   button("Disconnect and erase this app’s cached photos") {
    if(!signIn.isEnabled) { status.text="Wait for sign-in to finish."; return@button }
    try {
@@ -115,7 +121,7 @@ class SettingsActivity : Activity() {
     if(session!=null) worker.execute { try { Synology(session.first,session.second).call("SYNO.API.Auth","logout",mapOf("session" to "SynologyPhotos"),6) } catch(_: Exception) {} }
    } catch(_: Exception) { status.text="Wait for the current refresh to finish." }
   }
-  if(Vault(this).read()!=null) Photos.refresh(applicationContext,intent.getBooleanExtra("refresh_photos",false)) { message -> runOnUiThread { status.text=message } }
+  if(Vault(this).read()!=null) Photos.refresh(applicationContext,intent.getBooleanExtra("refresh_photos",false)) { message -> runOnUiThread { status.text=message;if(::syncDetails.isInitialized)syncDetails.text=PhotoSync.summary(this) } }
   button("Photo screensaver layout — Hero / Classic") { startActivity(android.content.Intent(this,DreamSettingsActivity::class.java)) }
   button("Connect Plex for Continue Watching") { startActivity(android.content.Intent(this,PlexConnectActivity::class.java)) }
   button("Disconnect Plex from Ambient TV") { worker.execute { PlexFeed.clear(applicationContext); runOnUiThread {status.text="Plex disconnected from Ambient TV. Other apps are unchanged."} } }

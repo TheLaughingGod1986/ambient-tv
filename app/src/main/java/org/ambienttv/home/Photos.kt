@@ -16,16 +16,19 @@ object Photos {
  fun dir(c: Context) = File(c.filesDir,"photos").apply { mkdirs() }
  fun files(c: Context) = dir(c).listFiles()?.filter { it.name.matches(Regex("[0-9]+-[0-9]+\\.jpg")) }?.sortedBy { it.name } ?: emptyList()
  fun status(c: Context): String {
+  if(PhotoSync.enabled(c) && !PhotoSyncPolicy.open(System.currentTimeMillis(),PhotoSync.zone(c)))return PhotoSync.waiting(c)
   if(AppPreferences.demo(c))return "Demo photos · no account needed"
   val saved=c.getSharedPreferences("state",0).getString("status","Sign in to connect Personal Space.")!!
   return if(saved.startsWith("Connected") && !hasCompleteCache(c)) "Cached photos need to reload. Select Refresh photos." else saved
  }
  @Synchronized fun refresh(c: Context, force: Boolean = false, done: ((String)->Unit)? = null) {
   if(AppPreferences.demo(c)) { done?.invoke("Demo photos ready. Connect your NAS to use your own photos."); return }
+  PhotoSync.schedule(c)
+  if(PhotoSync.enabled(c) && !PhotoSyncPolicy.open(System.currentTimeMillis(),PhotoSync.zone(c))){done?.invoke(PhotoSync.waiting(c));return}
   if(running) { done?.invoke("A refresh is already running."); return }
   val state = c.getSharedPreferences("state",0)
   val now = System.currentTimeMillis()
-  if(!force && !RefreshPolicy.shouldFetch(now,maxOf(lastAttempt,state.getLong("attemptAt",0)),state.getLong("success",0),hasCompleteCache(c) && state.getInt("mixVersion",0)==1)) return
+  if(!force && !RefreshPolicy.shouldFetch(now,maxOf(lastAttempt,state.getLong("attemptAt",0)),state.getLong("success",0),hasCompleteCache(c) && state.getInt("mixVersion",0)==1)){done?.invoke(status(c));return}
   running = true; lastAttempt = now
   state.edit().putLong("attemptAt",now).apply()
   worker.execute {
@@ -127,5 +130,5 @@ object Photos {
    Wallpaper("content://org.ambienttv.home.photos/${it.name}?render=6&w=$weatherBucket", WallpaperType.IMAGE, WallpaperDisplayMode.FIT_CENTER)
   }
  }
- @Synchronized fun clear(c: Context) { require(!running); Vault(c).clear(); files(c).forEach { it.delete() }; c.getSharedPreferences("state",0).edit().clear().commit(); lastAttempt=0; WeatherRenderer.clear(c); WeatherStore.clear(c) }
+ @Synchronized fun clear(c: Context) { require(!running); Vault(c).clear(); PhotoSync.schedule(c,true); files(c).forEach { it.delete() }; c.getSharedPreferences("state",0).edit().clear().commit(); lastAttempt=0; WeatherRenderer.clear(c); WeatherStore.clear(c) }
 }

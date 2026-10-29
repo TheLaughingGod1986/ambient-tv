@@ -334,6 +334,10 @@ class HomeActivity:Activity() {
    fun id(file:File)=file.name.substringAfter('-')
    val saved=ids("row-ids")
    val yesterday=if(same)ids("previous-row")else saved
+   var history=RecentPhotoHistory.read(prefs.getString("recent-rows","").orEmpty())
+   val oldDay=prefs.getLong("row-day",Long.MIN_VALUE)
+   if(oldDay in day-7..day)history=RecentPhotoHistory.remember(history,oldDay,saved)
+   val recent=(history.toSortedMap(reverseOrder()).values.flatten()+yesterday).distinct()
    val times=try{org.json.JSONObject(getSharedPreferences("state",0).getString("photoTimes","{}"))}catch(_:Exception){org.json.JSONObject()}
    fun related(a:File,b:File):Boolean {
     if(id(a)==id(b))return true
@@ -342,14 +346,14 @@ class HomeActivity:Activity() {
     return signature(a)?.let{x->signature(b)?.let{y->HomePhotoSimilarity.similar(x,y)}}==true
    }
    val selected=DailyHomeSelection.select(files.map(::id),favs.map(::id).toSet(),day,
-    if(same)saved else emptyList(),yesterday,
+    if(same)saved else emptyList(),recent,
     {a,b->related(files.first{ id(it)==a },files.first{ id(it)==b })},
     {id,slot->val file=files.first{ id(it)==id };val target=if(slot>=2)245f/170f else HomeLayout.photoWidth(slot).toFloat()/HomeLayout.photoHeight(slot)
      val ratio=ratios[file] ?: 1f;kotlin.math.abs(kotlin.math.ln(ratio.coerceAtLeast(.01f)/target)).toDouble()},
     {a,b->val x=signature(files.first{id(it)==a});val y=signature(files.first{id(it)==b});if(x==null || y==null)1.0 else HomePhotoSimilarity.colourDistance(x,y)})
    if(token!=epoch)return@execute
    photoSelectionKey=selectionKey;selectedPhotoIds=selected
-   if(previewFiles==null)prefs.edit().putInt("row-version",7).putLong("row-day",day).putString("row-ids",selected.joinToString(","){it.orEmpty()}).putString("previous-row",yesterday.joinToString(",")).apply()
+   if(previewFiles==null)prefs.edit().putInt("row-version",7).putLong("row-day",day).putString("row-ids",selected.joinToString(","){it.orEmpty()}).putString("previous-row",yesterday.joinToString(",")).putString("recent-rows",RecentPhotoHistory.encode(RecentPhotoHistory.remember(history,day,selected))).apply()
    val selectedFiles=selected.map{key->files.firstOrNull{id(it)==key}}
    handler.post {if(token==epoch && page=="Home" && !isDestroyed){bindHomePhotos(selectedFiles,files.size);photoBoundEpoch=token}}
   }
@@ -515,7 +519,7 @@ class HomeActivity:Activity() {
   heading("Ambient TV settings");place(text("Manage devices, services and photo display",23),244,236,1500,48)
   val groups=listOf(
    "TV & devices" to listOf(Triple("TV & inputs","Configure connected TV",{showPage("TV")}),Triple("Android settings","System settings",{safeStart(Intent(Settings.ACTION_SETTINGS))}),Triple("Android screensaver settings","Display and timeout",{safeStart(Intent(Settings.ACTION_DREAM_SETTINGS))})),
-   "Connected services" to listOf(Triple("Connect Plex","Manage your media server",{safeStart(Intent(this,PlexConnectActivity::class.java))}),Triple("Open Projectivy","Launch your TV interface",{launchPackage("com.spocky.projengmenu")}),Triple("Photo connection settings","Synology and album access",{safeStart(Intent(this,SettingsActivity::class.java))})).filter{it.first!="Open Projectivy" || packageManager.getLeanbackLaunchIntentForPackage("com.spocky.projengmenu")!=null},
+   "Connected services" to listOf(Triple("Connect Plex","Manage your media server",{safeStart(Intent(this,PlexConnectActivity::class.java))}),Triple("Open Projectivy","Launch your TV interface",{launchPackage("com.spocky.projengmenu")}),Triple("Photo connection settings",PhotoSync.summary(this).substringBefore("\n"),{safeStart(Intent(this,SettingsActivity::class.java))})).filter{it.first!="Open Projectivy" || packageManager.getLeanbackLaunchIntentForPackage("com.spocky.projengmenu")!=null},
    "Personalisation" to listOf(Triple("Photo screensaver","Family photos and timing",{safeStart(Intent(this,DreamSettingsActivity::class.java))}),Triple("Status & backup","Connections and local preferences",{safeStart(Intent(this,MaintenanceActivity::class.java))}),Triple("Restore hidden videos","${HomeDismissals.count(this)} hidden from Home",{restoreHiddenVideos()}),Triple("Start screensaver","Show family memories now",{startScreensaver()})))
   val controls=mutableMapOf<Pair<Int,Int>,View>()
   groups.forEachIndexed{col,(title,entries)->place(text(title,26),244+col*554,316,530,48);entries.forEachIndexed{row,(label,detail,action)->val v=tile(label+"\n"+detail,action).apply{setTextSize(TypedValue.COMPLEX_UNIT_PX,23*scale);maxLines=3;val copy=android.text.SpannableString(text);val start=label.length+1;copy.setSpan(android.text.style.AbsoluteSizeSpan(p(20)),start,copy.length,0);text=copy};controls[col to row]=v;place(v,244+col*554,382+row*148,530,126)}}
