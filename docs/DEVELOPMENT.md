@@ -86,3 +86,18 @@ signatures are uploaded. Photo thumbnails honour JPEG EXIF rotation/mirroring.
 `TvRegression` covers the stacked cards, three quick actions, empty and mixed
 media, refresh focus, all eight page bounds, and screensaver Back. Its illustrative
 feed exists only in the instrumentation source, not in production content.
+
+## Secondary-screen presentation
+
+TV Shows, Movies and Anime share the catalog renderer and `libraryCard`: artwork
+is contained above a separate two-line title, so labels do not obscure poster
+text. Category queries, ordering and pagination remain in PlexFeed. Photos uses
+two complete four-column rows with orientation-aware bounded thumbnails; Apps
+retains its installed-app listing in a scrollable four-column grid. Search uses
+the native IME and the existing YouTube intent. Settings keeps its real actions
+in three groups with a footer below the final card. The cached-photo viewer uses
+matching navy controls while retaining favourite and framing actions.
+
+`wireGrid` registers secondary controls with the regression focus/bounds probe.
+Emulator checks cover 1080p and 720p, but cannot establish authenticated service
+availability or native installed-app playback on a household TV.

@@ -27,6 +27,15 @@ class PhotoViewerActivity:Activity() {
   caption=TextView(this).apply{setTextColor(Color.WHITE);gravity=android.view.Gravity.CENTER};root.addView(caption)
   button=Button(this);root.addView(button)
   root.addView(Button(this).apply{text="Photo framing for screensaver";setOnClickListener{PhotoFraming.choose(this@PhotoViewerActivity,files[index].name.substringAfter('-'))}})
+  val density=resources.displayMetrics.density
+  caption.textSize=18f;caption.setPadding(16,12,16,12)
+  // Native buttons retain their actions, with the same navy and pale focus language as Home.
+  for(i in 0 until root.childCount){val control=root.getChildAt(i);if(control is Button){
+   control.isAllCaps=false;control.textSize=20f
+   fun style(focused:Boolean){control.setTextColor(if(focused)Color.rgb(9,22,36)else Color.WHITE);control.background=android.graphics.drawable.GradientDrawable().apply{setColor(if(focused)Color.rgb(228,239,248)else Color.rgb(18,43,69));cornerRadius=14*density;setStroke((2*density).toInt(),if(focused)Color.WHITE else Color.rgb(55,81,109))}}
+   style(false);control.setOnFocusChangeListener{_,focused->style(focused)}
+   control.layoutParams=LinearLayout.LayoutParams(-1,(56*density).toInt()).apply{setMargins((24*density).toInt(),(4*density).toInt(),(24*density).toInt(),(8*density).toInt())}
+  }}
   setContentView(root);button.requestFocus()
   button.setOnClickListener {val key=files[index].name.substringAfter('-');val prefs=getSharedPreferences("favourites",0);val ids=(prefs.getStringSet("ids",emptySet()) ?: emptySet()).toMutableSet();if(!ids.add(key))ids.remove(key);prefs.edit().putStringSet("ids",ids).apply();refreshLabel()}
   showPhoto()

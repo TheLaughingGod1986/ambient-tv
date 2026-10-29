@@ -368,6 +368,22 @@ class HomeActivity:Activity() {
    handler.post { if(token!=epoch || isFinishing)bitmap?.recycle() else if(bitmap!=null) {bitmaps.add(bitmap);view.setImageBitmap(bitmap)} }
   }
  }
+ /** Shared Plex tile: keep the complete artwork separate from a two-line title. */
+ private fun libraryCard(label:String,action:()->Unit):FrameLayout {
+  val card=ClippedPhotoCard(this,14*scale).apply {
+   id=nextId++;isFocusable=true;isFocusableInTouchMode=true;isClickable=true
+   contentDescription=label;background=rounded(Color.rgb(12,29,47),false)
+   setOnClickListener{action()}
+   setOnFocusChangeListener{_,focused->foreground=rounded(Color.TRANSPARENT,focused)}
+  }
+  card.addView(ImageView(this).apply{scaleType=ImageView.ScaleType.FIT_CENTER;importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO},FrameLayout.LayoutParams(-1,p(210)))
+  card.addView(text(label,23).apply {
+   maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END
+   gravity=Gravity.CENTER_VERTICAL;setPadding(p(16),0,p(16),0)
+   typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
+  },FrameLayout.LayoutParams(-1,p(72),Gravity.BOTTOM))
+  return card
+ }
  private fun catalog(category:String,index:Int){
   heading(category)
   val loading=text("Loading your Plex library…",28);place(loading,244,248,1500,68)
@@ -381,11 +397,11 @@ class HomeActivity:Activity() {
      place(text("Latest additions · Plex",25),244,236,1500,52)
      val gridControls=mutableListOf<View>()
      result.items.forEachIndexed{position,item->
-      val card=photoTile(null,item.title){WatchItem(item.title,"com.plexapp.android",PlexProtocol.detailUri(item.server,item.key),"",-1,-1).open(this)}
+      val card=libraryCard(item.title){WatchItem(item.title,"com.plexapp.android",PlexProtocol.detailUri(item.server,item.key),"",-1,-1).open(this)}
       gridControls.add(card)
-      place(card,244+(position%5)*333,306+(position/5)*294,312,272)
+      place(card,244+(position%5)*333,306+(position/5)*300,312,282)
       val image=card.getChildAt(0) as ImageView
-      try{image.setImageDrawable(packageManager.getApplicationIcon("com.plexapp.android"));image.scaleType=ImageView.ScaleType.FIT_CENTER;image.setPadding(p(70),p(30),p(70),p(90))}catch(_:Exception){}
+      try{image.setImageDrawable(packageManager.getApplicationIcon("com.plexapp.android"));image.scaleType=ImageView.ScaleType.FIT_CENTER;image.setPadding(p(70),p(24),p(70),p(24))}catch(_:Exception){}
       worker.execute imageJob@{if(token!=epoch)return@imageJob;val bitmap=if(item.thumb.isBlank())null else WatchNextReader.art(this,"plex-art://${item.server}/${item.key}");handler.post{if(token==epoch && bitmap!=null){bitmaps.add(bitmap);image.setPadding(0,0,0,0);image.scaleType=ImageView.ScaleType.FIT_CENTER;image.setImageBitmap(bitmap)}else bitmap?.recycle()}}
      }
      val navId=focusViews["nav:"+when(category){"TV Shows"->1;"Movies"->2;else->3}]?.id ?: View.NO_ID
@@ -426,7 +442,7 @@ class HomeActivity:Activity() {
    val card=ClippedPhotoCard(this,14*scale).apply{id=nextId++;isFocusable=true;isFocusableInTouchMode=true;isClickable=true;contentDescription="View photo ${galleryIndex*8+i+1} of ${files.size}";foreground=rounded(Color.TRANSPARENT,false)}
    val image=OrientationPhotoView(this);card.addView(image,FrameLayout.LayoutParams(-1,-1))
    card.setOnClickListener{openPhoto(file)};card.setOnFocusChangeListener{_,focused->card.foreground=rounded(Color.TRANSPARENT,focused)}
-   bindGalleryPhoto(image,file);place(card,244+(i%4)*416,316+(i/4)*290,396,270);card
+   bindGalleryPhoto(image,file);place(card,244+(i%4)*416,316+(i/4)*300,396,280);card
   }
   val actions=mutableListOf<View>()
   actions.add(tile("Open Synology Photos"){launchPackage("com.synology.projectkailash")}.also{place(it,244,944,400,72)})
@@ -452,12 +468,13 @@ class HomeActivity:Activity() {
   apps.chunked(4).forEach{batch->val row=LinearLayout(this).apply{isBaselineAligned=false};batch.forEach{info->
    val label=info.loadLabel(packageManager).toString()
    val view=tile(label){launchPackage(info.activityInfo.packageName)}.apply{maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END;setTextSize(TypedValue.COMPLEX_UNIT_PX,22*scale)}
-   try{val icon=info.loadIcon(packageManager);icon.setBounds(0,0,p(48),p(48));view.setCompoundDrawables(icon,null,null,null);view.compoundDrawablePadding=p(18)}catch(_:Exception){view.text=label.take(1)+"  "+label}
-   controls.add(view);row.addView(view,LinearLayout.LayoutParams(contentPx(396),p(114)).apply{setMargins(0,0,contentPx(20),p(22))})
+   try{val icon=info.loadIcon(packageManager);icon.setBounds(0,0,p(64),p(64));view.setCompoundDrawables(icon,null,null,null);view.compoundDrawablePadding=p(18)}catch(_:Exception){view.text=label.take(1)+"  "+label}
+   controls.add(view);row.addView(view,LinearLayout.LayoutParams(contentPx(396),p(132)).apply{setMargins(0,0,contentPx(20),p(22))})
   };rows.addView(row)}
   place(scroll,244,306,1648,710);wireGrid(controls,4)
  }
  private fun wireGrid(cards:List<View>,columns:Int,actions:List<View> = emptyList(),above:List<View> = emptyList()){
+  cards.forEachIndexed{i,v->focusViews["grid:$i"]=v};actions.forEachIndexed{i,v->focusViews["action:$i"]=v};above.forEachIndexed{i,v->focusViews["filter:$i"]=v}
   val nav=focusViews.filterKeys{it.startsWith("nav:")}.values.toList()
   val navId=focusViews["nav:"+when(page){"TV Shows"->1;"Movies"->2;"Anime"->3;"Apps"->4;"Photos"->5;"Search"->6;else->7}]?.id ?: View.NO_ID
   val first=above.firstOrNull() ?: cards.firstOrNull() ?: actions.firstOrNull()
@@ -476,19 +493,18 @@ class HomeActivity:Activity() {
   val navId=focusViews["nav:7"]!!.id
   controls.forEach{(pos,v)->val(c,r)=pos;v.nextFocusLeftId=controls[(c-1) to r]?.id ?: if(c==0)navId else controls[(c-1) to 0]?.id ?: navId;v.nextFocusRightId=controls[(c+1) to r]?.id ?: controls[(c+1) to 0]?.id ?: v.id;v.nextFocusUpId=controls[c to (r-1)]?.id ?: v.id;v.nextFocusDownId=controls[c to (r+1)]?.id ?: v.id}
   focusViews.filterKeys{it.startsWith("nav:")}.values.forEach{it.nextFocusRightId=controls[0 to 0]!!.id}
-  place(text("Settings open the existing Android TV, Plex and Synology integrations.",21),244,944,1648,72)
+  place(text("Settings open the existing Android TV, Plex and Synology integrations.",21),244,1000,1648,48)
  }
  private fun searchPage(){
   heading("Search");place(text("Find videos on YouTube",23),244,236,1500,48)
-  val panel=FrameLayout(this).apply{background=rounded(Color.rgb(11,30,47),false)};place(panel,244,316,1648,350)
-  place(text("Find videos",30),280,348,1500,60)
+  place(text("Search for something to watch",30),244,344,1500,60)
   val input=EditText(this).apply{id=nextId++;hint="Search YouTube…";setTextColor(titleColor);setHintTextColor(Color.LTGRAY);setTextSize(TypedValue.COMPLEX_UNIT_PX,28*scale);setSingleLine(true);imeOptions=android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH;background=rounded(Color.rgb(24,52,77),false);setPadding(p(24),p(10),p(24),p(10))}
   input.setOnFocusChangeListener{_,focused->input.background=rounded(Color.rgb(24,52,77),focused)}
-  place(input,280,440,1200,86)
+  place(input,244,430,1200,96)
   fun submit(){val query=input.text.toString().trim();if(query.isNotEmpty()){(getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).hideSoftInputFromWindow(input.windowToken,0);val target=Intent(Intent.ACTION_VIEW,Uri.parse("https://www.youtube.com/results?search_query="+Uri.encode(query))).setPackage("com.google.android.youtube.tv");if(target.resolveActivity(packageManager)!=null)safeStart(target)else launchPackage("com.google.android.youtube.tv")}}
-  val submit=tile("Search YouTube"){submit()};place(submit,1500,440,350,86)
+  val submit=tile("Search YouTube"){submit()};place(submit,1464,430,424,96)
   input.setOnEditorActionListener{_,action,event->if(action==android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH || event?.keyCode==KeyEvent.KEYCODE_ENTER){if(event==null || event.action==KeyEvent.ACTION_UP)submit();true}else false}
-  place(text("Use your remote to type. Results open in YouTube.",24),280,554,1500,58)
+  place(text("Use your remote to type. Results open in YouTube.",24),244,550,1500,58)
   wireGrid(listOf(input,submit),2)
  }
  private fun watchGrid(){
