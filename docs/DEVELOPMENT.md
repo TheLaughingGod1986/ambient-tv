@@ -72,7 +72,8 @@ secret scanner on the complete Git history before making a repository public.
 Home uses a large featured memory, Browse photos, and two stacked photo shortcuts.
 The three quick actions (YouTube, Plex, Synology Photos) precede four Continue
 Watching cards. All apps is in the sidebar; the screensaver remains in Settings.
-The sidebar reserves its own area even when compact labels expand. All eight
+The compact sidebar reserves a 96px icon rail and a 28px gutter. Expanded labels
+use an opaque overlay without moving the content. All eight
 pages share the mountain sunset and stacked clock/date treatment.
 
 Daily photo selection uses the Europe/London calendar day, retains its chosen

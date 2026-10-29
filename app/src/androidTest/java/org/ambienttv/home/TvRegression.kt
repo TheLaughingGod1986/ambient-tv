@@ -32,7 +32,7 @@ class TvRegression:Instrumentation(){
    c.getSharedPreferences("home-ui",0).edit().putBoolean("compactSidebar",true).commit()
    main{h.showPageForTest("Home")};waitFor{h.readyForTest() && h.photoReadyForTest()}
    stage="directional navigation"
-   main{h.focusForTest("nav:0")};waitFor{h.sidebarExpandedForTest()};SystemClock.sleep(250);capture("sidebar-expanded");var photoBounds=android.graphics.Rect();main{photoBounds=h.boundsForTest().getValue("photo:0");check(kotlin.math.abs(photoBounds.left-w*244f/1920f)<2f);check(photoBounds.width()>h.boundsForTest().getValue("photo:1").width()*1.3f)};sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_RIGHT);waitForIdleSync();waitFor{h.focusKeyForTest()=="photo:0" && !h.sidebarExpandedForTest()};main{check(h.boundsForTest().getValue("photo:0")==photoBounds)};SystemClock.sleep(250);capture("sidebar-compact")
+   main{h.focusForTest("nav:0")};waitFor{h.sidebarExpandedForTest()};SystemClock.sleep(250);capture("sidebar-expanded");var photoBounds=android.graphics.Rect();main{photoBounds=h.boundsForTest().getValue("photo:0");check(kotlin.math.abs(photoBounds.left-w*HomeLayout.COMPACT_LEFT/1920f)<2f);check(photoBounds.width()>h.boundsForTest().getValue("photo:1").width()*1.3f)};sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_RIGHT);waitForIdleSync();waitFor{h.focusKeyForTest()=="photo:0" && !h.sidebarExpandedForTest()};main{check(h.boundsForTest().getValue("photo:0")==photoBounds)};SystemClock.sleep(250);capture("sidebar-compact")
    for(i in 1..2){sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_RIGHT);waitForIdleSync();waitFor{h.focusKeyForTest()=="photo:$i"}}
    sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_DOWN);waitForIdleSync();waitFor{h.focusKeyForTest()=="photo:3"}
    for(i in 1 downTo 0){sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_LEFT);waitForIdleSync();waitFor{h.focusKeyForTest()=="photo:$i"}}
@@ -47,6 +47,12 @@ class TvRegression:Instrumentation(){
    sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_DOWN);waitForIdleSync();waitFor{h.focusKeyForTest()=="media:0"}
    for(i in 1..3){sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_RIGHT);waitForIdleSync();waitFor{h.focusKeyForTest()=="media:$i"}}
    main{h.refreshDecorForTest()};waitForIdleSync();main{check(h.focusKeyForTest()=="media:3")}
+   stage="quick launch focus"
+   var youtube:android.widget.TextView?=null
+   main{h.focusForTest("footer:0");youtube=h.currentFocus as android.widget.TextView;check(youtube!!.currentTextColor==android.graphics.Color.rgb(9,22,36))}
+   capture("youtube-focused")
+   main{h.focusForTest("footer:1");check(youtube!!.currentTextColor==android.graphics.Color.rgb(240,247,252))}
+   capture("youtube-unfocused")
    stage="pages"
    for(page in listOf("Home","TV Shows","Movies","Anime","Apps","Photos","Search","Settings")){
     stage="page: $page";main{h.showPageForTest(page)};waitFor{h.secondaryReadyForTest() && (page!="Home" || h.feedSnapshotForTest().size==4 && h.photoReadyForTest())};SystemClock.sleep(400)

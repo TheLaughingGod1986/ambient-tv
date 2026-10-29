@@ -104,7 +104,7 @@ class HomeActivity:Activity() {
   val motion=Settings.Global.getFloat(contentResolver,Settings.Global.ANIMATOR_DURATION_SCALE,1f)>0f
   if(first || !motion)frame(end) else sidebarAnimation=android.animation.ValueAnimator.ofInt(start,end).apply{duration=180;addUpdateListener{frame(it.animatedValue as Int)};start()}
  }
- private fun contentPx(value:Int)=p(value)
+ private fun contentPx(value:Int)=p(HomeLayout.contentWidth(value,compactLayout))
  private lateinit var header:HomeWeatherView
  private lateinit var clock:TextView
  private var mediaHeading:TextView?=null
@@ -151,12 +151,12 @@ class HomeActivity:Activity() {
   detach(root);root.removeAllViews();bitmaps.forEach {if(!it.isRecycled)it.recycle()};bitmaps.clear()
  }
  private fun p(v:Int)=(v*scale).toInt()
- private fun place(view:View,x:Int,y:Int,w:Int,h:Int) { val content=x>=244;root.addView(view,FrameLayout.LayoutParams(if(content)contentPx(w)else p(w),p(h)).apply { leftMargin=p(x);topMargin=p(y) }) }
+ private fun place(view:View,x:Int,y:Int,w:Int,h:Int) { val content=x>=244;root.addView(view,FrameLayout.LayoutParams(if(content)contentPx(w)else p(w),p(h)).apply { leftMargin=p(if(content)HomeLayout.contentX(x,compactLayout)else x);topMargin=p(y) }) }
  private fun text(value:String,size:Int=30):TextView=TextView(this).apply { text=value;setTextSize(TypedValue.COMPLEX_UNIT_PX,size*scale);setTextColor(titleColor);gravity=Gravity.CENTER_VERTICAL }
  private fun tile(label:String,action:()->Unit):TextView=text(label,26).apply {
   id=nextId++;isFocusable=true;isFocusableInTouchMode=true;isClickable=true;setPadding(p(20),p(10),p(16),p(10));contentDescription=label
   background=rounded(Color.rgb(17,36,51),false)
-  setOnFocusChangeListener { _,focused -> background=rounded(if(focused)Color.rgb(228,239,248) else Color.rgb(17,36,51),focused);setTextColor(if(focused)Color.rgb(9,22,36) else titleColor);compoundDrawables.forEach{if(it is HomeNavIcon)it.setTint(if(focused)Color.rgb(9,22,36)else titleColor)} }
+  setOnFocusChangeListener { _,focused -> background=rounded(if(focused)Color.rgb(228,239,248) else Color.rgb(17,36,51),focused);setTextColor(if(focused)Color.rgb(9,22,36) else titleColor);compoundDrawables.forEach{if(it is HomeNavIcon || it is ActionChevron)it.setTint(if(focused)Color.rgb(9,22,36)else titleColor)} }
   setOnClickListener { action() }
  }
  private fun rounded(color:Int,focus:Boolean)=GradientDrawable().apply { setColor(color);cornerRadius=14*scale;setStroke(p(if(focus)3 else 1),if(focus)Color.WHITE else Color.rgb(43,66,82)) }
@@ -208,7 +208,7 @@ class HomeActivity:Activity() {
    "Search"->searchPage()
    "Settings"->settingsPage()
   }
-  sidebarPanel=View(this).apply{elevation=p(8).toFloat();isClickable=true;setBackgroundColor(Color.argb(232,3,13,25));importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO};place(sidebarPanel,0,0,96,1080)
+  sidebarPanel=View(this).apply{elevation=p(8).toFloat();isClickable=true;setBackgroundColor(Color.rgb(3,13,25));importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO};place(sidebarPanel,0,0,96,1080)
   focusViews.filterKeys{it.startsWith("nav:")}.values.forEach{it.elevation=p(9).toFloat();it.bringToFront()}
   (first ?: focusViews[if(name=="TV")"nav:7"else"nav:0"])?.requestFocus();updateSidebar()
  }
@@ -268,11 +268,11 @@ class HomeActivity:Activity() {
   footerActions.forEachIndexed{i,(label,action)->
    val view=tile(label,action)
    val originalFocus=view.onFocusChangeListener
-   view.background=dockBackground(i==0);if(i==0)view.setTextColor(Color.rgb(9,22,36));view.setOnFocusChangeListener{v,focused->originalFocus?.onFocusChange(v,focused);view.background=dockBackground(focused || i==0);if(i==0)view.setTextColor(Color.rgb(9,22,36));view.foreground=if(focused)photoOutline(true)else null}
+   view.background=dockBackground(false);view.setOnFocusChangeListener{v,focused->originalFocus?.onFocusChange(v,focused);view.background=dockBackground(focused);view.foreground=if(focused)photoOutline(true)else null}
    focusViews["footer:$i"]=view;place(view,244+i*555,HomeLayout.DOCK_Y,534,HomeLayout.DOCK_H)
-   val icon=if(i<3)try{packageManager.getApplicationIcon(listOf("com.google.android.youtube.tv","com.plexapp.android","com.synology.projectkailash")[i])}catch(_:Exception){HomeNavIcon("Apps").apply{setTint(if(i==0)Color.rgb(9,22,36)else titleColor)}}else HomeNavIcon(if(i==3)"Apps" else "Photos").apply{setTint(titleColor)}
+   val icon=if(i<3)try{packageManager.getApplicationIcon(listOf("com.google.android.youtube.tv","com.plexapp.android","com.synology.projectkailash")[i])}catch(_:Exception){HomeNavIcon("Apps").apply{setTint(titleColor)}}else HomeNavIcon(if(i==3)"Apps" else "Photos").apply{setTint(titleColor)}
    val longest=maxOf(icon.intrinsicWidth,icon.intrinsicHeight,1);icon.setBounds(0,0,p((64f*icon.intrinsicWidth.coerceAtLeast(1)/longest).toInt()),p((64f*icon.intrinsicHeight.coerceAtLeast(1)/longest).toInt()))
-   view.setPadding(p(18),p(8),p(12),p(8));view.compoundDrawablePadding=p(20);val chevron=ActionChevron().apply{setTint(if(i==0)Color.rgb(9,22,36)else titleColor);setBounds(0,0,p(24),p(30))};view.setCompoundDrawables(icon,null,chevron,null)
+   view.setPadding(p(18),p(8),p(12),p(8));view.compoundDrawablePadding=p(20);val chevron=ActionChevron().apply{setTint(titleColor);setBounds(0,0,p(24),p(30))};view.setCompoundDrawables(icon,null,chevron,null)
    val subtitle=listOf("Watch videos together","Movies & TV shows","Open Synology Photos")[i]
    view.text=android.text.SpannableString("$label\n$subtitle").apply{
     setSpan(android.text.style.StyleSpan(Typeface.BOLD),0,label.length,0)

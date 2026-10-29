@@ -67,6 +67,12 @@ class HomePhotoPolicyTest {
   assertEquals(day("2026-10-25T00:30:00Z"),day("2026-10-25T01:30:00Z"))
   assertEquals(day("2026-10-25T22:59:59Z")+1,day("2026-10-25T23:00:00Z"))
  }
+ @Test fun compactContentUsesRecoveredWidthAndKeepsRightSafeArea(){
+  assertEquals(124,HomeLayout.contentX(244,true))
+  assertEquals(1888,HomeLayout.contentX(1888,true))
+  assertEquals(1764,HomeLayout.contentWidth(1644,true))
+  assertEquals(244,HomeLayout.contentX(244,false))
+ }
  @Test fun allPhotosFourVideosAndThreeQuickActionsFitAtEveryTvSize() {
   for((width,height) in listOf(1280 to 720,1920 to 1080,3840 to 2160)) {
    val scale=HomeLayout.scale(width,height)

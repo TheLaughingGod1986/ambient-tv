@@ -61,6 +61,10 @@ object HomePhotoPolicy {
 }
 
 object HomeLayout {
+ const val COMPACT_LEFT=124 // 96px icon rail plus a 28px content gutter.
+ fun contentX(x:Int,compact:Boolean)=if(!compact)x else COMPACT_LEFT+(x-244)*(1888-COMPACT_LEFT)/(1888-244)
+ fun contentWidth(width:Int,compact:Boolean)=if(!compact)width else width*(1888-COMPACT_LEFT)/(1888-244)
+
  const val LEFT=244;const val RIGHT=1888;const val PHOTO_Y=244;const val PHOTO_W=396;const val PHOTO_H=338;const val GAP=20
  const val MEDIA_HEADING_Y=764;const val MEDIA_Y=824;const val MEDIA_W=396;const val MEDIA_H=223;const val DOCK_Y=654;const val DOCK_H=100
  fun photoWidth(index:Int)=when(index){0->666;1->492;else->446}
