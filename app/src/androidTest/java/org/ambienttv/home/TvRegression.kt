@@ -21,6 +21,7 @@ class TvRegression:Instrumentation(){
   try{
    check(android.os.Build.FINGERPRINT.contains("generic") || android.os.Build.MODEL.contains("sdk"))
    val c=targetContext;check(Vault(c).read()==null && PlexApi.vault(c).read()==null)
+   stage="artwork redirects, caching and independent Plex loading";ArtworkRegression.run(c)
    val files=DemoPhotos.files(c);HomeActivity.previewFiles=files;HomeActivity.previewWeather=WeatherPanel("—","Weather is off","Demo",null,true)
    home=startActivitySync(Intent(c,HomeActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as HomeActivity
    val h=home

@@ -7,9 +7,10 @@ import android.widget.FrameLayout
 
 /** Match the hardware outline in native software previews as well as on the TV. */
 internal class ClippedPhotoCard(c:Context,private val radius:Float):FrameLayout(c) {
+ init {clipToOutline=true;setLayerType(View.LAYER_TYPE_HARDWARE,null)}
  private val clip=Path()
  override fun onSizeChanged(w:Int,h:Int,oldw:Int,oldh:Int){super.onSizeChanged(w,h,oldw,oldh);clip.reset();clip.addRoundRect(RectF(0f,0f,w.toFloat(),h.toFloat()),radius,radius,Path.Direction.CW)}
- override fun dispatchDraw(canvas:Canvas){val save=canvas.save();canvas.clipPath(clip);super.dispatchDraw(canvas);canvas.restoreToCount(save)}
+ override fun dispatchDraw(canvas:Canvas){if(canvas.isHardwareAccelerated){super.dispatchDraw(canvas);return};val save=canvas.save();canvas.clipPath(clip);super.dispatchDraw(canvas);canvas.restoreToCount(save)}
 }
 
 /** Owns only decoded thumbnails. No network, face analysis, animation, or original downloads. */

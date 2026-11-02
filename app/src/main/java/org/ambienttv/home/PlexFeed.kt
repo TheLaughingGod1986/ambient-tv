@@ -12,17 +12,39 @@ internal object PlexFeed {
  private val servers=mutableMapOf<String,Server>()
  private var cached=emptyList<PlexResume>()
  private val catalogThumbs=mutableMapOf<String,String>()
- private val artwork=BoundedTtlCache<String,ByteArray>(4*1024*1024,120000){it.size}
+ private val artwork=BoundedTtlCache<ArtSource,ByteArray>(4*1024*1024,900000){it.size}
+ private data class ArtSource(val server:Server,val thumb:String,val poster:Boolean)
+ @Volatile private var artSources=emptyMap<String,ArtSource>()
+ private fun publishArtwork(){
+  val next=mutableMapOf<String,ArtSource>()
+  catalogThumbs.forEach{(key,thumb)->servers[key.substringBefore(':')]?.let{next[key]=ArtSource(it,thumb,true)}}
+  cached.forEach{item->servers[item.server]?.let{next[item.server+":"+item.ratingKey]=ArtSource(it,item.thumb,false)}}
+  artSources=next.toMap()
+ }
+ private var discoveredAt=0L
  private var refreshedAt=0L
  fun hasSession(c:Context)=PlexApi.vault(c).read()!=null
  fun status(c:Context)=c.getSharedPreferences("plex-status",0).getString("message","Connect Plex to add its Continue Watching items.")!!
  private fun status(c:Context,s:String){c.getSharedPreferences("plex-status",0).edit().putString("message",s).apply()}
- private fun resetSessionCache(){servers.clear();catalogThumbs.clear();artwork.clear();cached=emptyList();refreshedAt=0;WatchNextReader.clearDirectPlex()}
+ private fun resetSessionCache(){artSources=emptyMap();servers.clear();catalogThumbs.clear();artwork.clear();cached=emptyList();discoveredAt=0;refreshedAt=0;WatchNextReader.clearDirectPlex()}
  @Synchronized fun acceptSession(c:Context,token:String){resetSessionCache();HomeDismissals.rotatePlexScope(c);PlexApi.vault(c).save("https://plex.tv",token)}
  @Synchronized fun clear(c:Context){PlexApi.vault(c).clear();resetSessionCache();status(c,"Plex disconnected from Ambient TV.")}
  @Synchronized fun read(c:Context,force:Boolean=false):List<WatchItem>{
   val token=PlexApi.vault(c).read()?.second ?: return emptyList()
   if(!force && ResumeFeedPolicy.fresh(android.os.SystemClock.elapsedRealtime(),refreshedAt,60000) && servers.isNotEmpty())return watchItems()
+  // Reuse verified connections; refreshing progress should not rediscover every server.
+  if(servers.isNotEmpty() && ResumeFeedPolicy.fresh(android.os.SystemClock.elapsedRealtime(),discoveredAt,900000)){
+   val next=mutableListOf<PlexResume>();var allReached=true
+   for(server in servers.values.toList())try{
+    val body=JSONObject(String(PlexApi.request(c,server.base+"/hubs/continueWatching?count=12",server.token),Charsets.UTF_8))
+    next.addAll(PlexProtocol.parseHub(server.id,body,allowNextEpisodes=true))
+   }catch(_:Exception){allReached=false;break}
+   if(allReached){
+    cached=next.distinctBy{it.server+":"+it.ratingKey}.take(12);refreshedAt=android.os.SystemClock.elapsedRealtime()
+    c.getSharedPreferences("plex-status",0).edit().putLong("successAt",System.currentTimeMillis()).apply()
+    status(c,"Connected to Plex · ${cached.size} continue watching items");publishArtwork();return watchItems()
+   }
+  }
   try{
    val resources=PlexApi.resources(c,token);val next=mutableListOf<PlexResume>();var connected=0
    val deadline=android.os.SystemClock.elapsedRealtime()+25000
@@ -50,25 +72,28 @@ internal object PlexFeed {
      }catch(_:Exception){/* Try the next advertised connection; never log its token or URL. */}
     }
    }
-   if(connected>0){c.getSharedPreferences("plex-status",0).edit().putLong("successAt",System.currentTimeMillis()).apply();cached=next.distinctBy{it.server+":"+it.ratingKey}.take(12);refreshedAt=android.os.SystemClock.elapsedRealtime();status(c,"Connected to Plex · ${cached.size} continue watching items")}
+   if(connected>0){discoveredAt=android.os.SystemClock.elapsedRealtime();c.getSharedPreferences("plex-status",0).edit().putLong("successAt",System.currentTimeMillis()).apply();cached=next.distinctBy{it.server+":"+it.ratingKey}.take(12);refreshedAt=android.os.SystemClock.elapsedRealtime();status(c,"Connected to Plex · ${cached.size} continue watching items")}
    else{status(c,"Signed in to Plex, but no server could be reached securely. Check that your Plex server is available.");if(android.os.SystemClock.elapsedRealtime()-refreshedAt>600000)cached=emptyList()}
   }catch(e:PlexHttpFailure){if(e.status==401)resetSessionCache();status(c,if(e.status==401)"Plex sign-in needs reconnecting." else "Plex could not refresh right now.");if(android.os.SystemClock.elapsedRealtime()-refreshedAt>600000)cached=emptyList()}
   catch(_:Exception){status(c,"Could not reach Plex. Your existing Plex app login is unchanged.");if(android.os.SystemClock.elapsedRealtime()-refreshedAt>600000)cached=emptyList()}
+  publishArtwork()
   return watchItems()
  }
  private fun watchItems()=cached.map{WatchItem(it.title,"com.plexapp.android",PlexProtocol.detailUri(it.server,it.ratingKey),"plex-art://${it.server}/${it.ratingKey}",it.position,it.duration,ResumeFeedPolicy.plexMillis(it.engagedAt),nextEpisode=it.nextEpisode)}
  // Cache-local lock only: memory callbacks must never wait for Plex network operations.
  fun trimArtwork(){artwork.clear()}
- @Synchronized fun art(c:Context,uri:android.net.Uri):Bitmap?{
-  val item=cached.firstOrNull{it.server==uri.host && it.ratingKey==uri.lastPathSegment}
-  val thumb=item?.thumb ?: catalogThumbs[uri.host+":"+uri.lastPathSegment] ?: return null
-  val server=servers[uri.host] ?: return null
+ // Never acquire the catalog/feed monitor here: it can hold slow network calls.
+ fun art(c:Context,uri:android.net.Uri):Bitmap?{
+  val snapshot=artSources
+  val source=snapshot[uri.host+":"+uri.lastPathSegment] ?: return null
+  val thumb=source.thumb;val server=source.server
   return try{
-   val key=server.id+":"+thumb
+   val key=source
    val now=android.os.SystemClock.elapsedRealtime()
    val bytes=artwork.get(key,now) ?: PlexApi.request(c,server.base+thumb,server.token,maxBytes=6*1024*1024).also{artwork.put(key,it,android.os.SystemClock.elapsedRealtime())}
    val bounds=BitmapFactory.Options().apply{inJustDecodeBounds=true};BitmapFactory.decodeByteArray(bytes,0,bytes.size,bounds)
-   BitmapFactory.decodeByteArray(bytes,0,bytes.size,BitmapFactory.Options().apply{inSampleSize=BitmapPolicy.sampleSize(bounds.outWidth,bounds.outHeight,if(item==null)384 else 512,if(item==null)640 else 320)})
+   if(snapshot!==artSources && artSources[uri.host+":"+uri.lastPathSegment]!=source)return null
+   BitmapFactory.decodeByteArray(bytes,0,bytes.size,BitmapFactory.Options().apply{inSampleSize=BitmapPolicy.sampleSize(bounds.outWidth,bounds.outHeight,if(source.poster)384 else 512,if(source.poster)640 else 320)})
   }catch(_:Exception){null}
  }
  @Synchronized fun catalog(c:Context,category:String,page:Int):PlexCatalogPage{
@@ -107,6 +132,7 @@ internal object PlexFeed {
   }
   val items=PlexCatalogPolicy.page(all,page)
   catalogThumbs.clear();items.forEach{if(it.thumb.isNotBlank())catalogThumbs[it.server+":"+it.key]=it.thumb}
+  publishArtwork()
   c.getSharedPreferences("plex-catalog-audit",0).edit().putString("category",category).putInt("page",page).putInt("count",items.size).putString("sections",org.json.JSONArray(names).toString()).apply()
   return PlexCatalogPage(items,page<9 && total>(page+1)*PlexCatalogPolicy.PAGE_SIZE,names)
  }

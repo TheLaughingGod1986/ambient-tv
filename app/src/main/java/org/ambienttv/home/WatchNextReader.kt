@@ -23,6 +23,9 @@ data class WatchItem(val title:String,val owner:String,val intentUri:String,val 
  }
 }
 object WatchNextReader {
+ private val artwork=BoundedTtlCache<String,ByteArray>(3*1024*1024,600000){it.size}
+ fun trimArtwork(){artwork.clear()}
+ fun readNative(c:Context)=merge(readProvider(c),directPlexCache,PlexFeed.hasSession(c))
  private val providerCache=LastGoodSource<WatchItem>()
  @Volatile private var directPlexCache=emptyList<WatchItem>()
  internal fun clearDirectPlex(){directPlexCache=emptyList()}
@@ -39,14 +42,14 @@ object WatchNextReader {
   onProvider?.invoke(merge(native,directPlexCache,PlexFeed.hasSession(c)))
   val direct=try{PlexFeed.read(c,forcePlex)}catch(_:Exception){directPlexCache}
   directPlexCache=direct
-  return merge(native,direct,PlexFeed.hasSession(c))
+  return merge(providerCache.update(null),direct,PlexFeed.hasSession(c))
  }
  private fun readProvider(c:Context):List<WatchItem> {
   if(Build.VERSION.SDK_INT<26)return emptyList()
   return try {
    val out=mutableListOf<WatchItem>();var rows=0;var continueRows=0;var youtubeRows=0;var youtubeNewest=0L
    val seen=mutableSetOf<String>()
-   c.contentResolver.query(android.media.tv.TvContract.WatchNextPrograms.CONTENT_URI,null,null,null,"last_engagement_time_utc_millis DESC")?.use {cursor ->
+   c.contentResolver.query(android.media.tv.TvContract.WatchNextPrograms.CONTENT_URI,arrayOf("_id","package_name","watch_next_type","last_playback_position_millis","duration_millis","title","intent_uri","poster_art_uri","last_engagement_time_utc_millis"),null,null,"last_engagement_time_utc_millis DESC")?.use {cursor ->
     fun str(name:String):String {val i=cursor.getColumnIndex(name);return if(i>=0)cursor.getString(i).orEmpty() else ""}
     fun number(name:String):Long {val i=cursor.getColumnIndex(name);return if(i>=0 && !cursor.isNull(i))cursor.getLong(i) else -1}
     rows=cursor.count
@@ -72,23 +75,47 @@ object WatchNextReader {
    providerCache.update(null)
   }
  }
- fun art(c:Context,value:String):Bitmap? {
-  return try {
-   val uri=Uri.parse(value)
-   if(uri.scheme=="plex-art")return PlexFeed.art(c,uri)
-   var connection:java.net.HttpURLConnection?=null
-   val input=when(uri.scheme){
-    "content","android.resource"->c.contentResolver.openInputStream(uri)
-    "https","http"->{
-     connection=java.net.URL(value).openConnection() as java.net.HttpURLConnection
-     connection.connectTimeout=3000;connection.readTimeout=3000;connection.instanceFollowRedirects=false
-     if(connection.responseCode!=200){connection.disconnect();return null};connection.inputStream
-    }
-    else->return null
-   }
-   val bytes=try {input?.use {input ->val out=ByteArrayOutputStream();val buf=ByteArray(8192);while(true){val n=input.read(buf);if(n<0)break;require(out.size()+n<=6*1024*1024);out.write(buf,0,n)};out.toByteArray()}}finally{connection?.disconnect()} ?: return null
-   val bounds=BitmapFactory.Options().apply {inJustDecodeBounds=true};BitmapFactory.decodeByteArray(bytes,0,bytes.size,bounds)
-   BitmapFactory.decodeByteArray(bytes,0,bytes.size,BitmapFactory.Options().apply {inSampleSize=BitmapPolicy.sampleSize(bounds.outWidth,bounds.outHeight,512,320)})
-  }catch(_:Exception){null}
+ private fun bytes(input:java.io.InputStream):ByteArray=input.use {
+  val out=ByteArrayOutputStream();val buffer=ByteArray(8192)
+  while(true){val n=it.read(buffer);if(n<0)break;require(out.size()+n<=6*1024*1024);out.write(buffer,0,n)}
+  out.toByteArray()
  }
+ private fun remoteBytes(value:String):ByteArray? {
+  var url=java.net.URL(value)
+  repeat(4){
+   if(url.protocol !in listOf("http","https") || url.userInfo!=null)return null
+   val connection=url.openConnection() as java.net.HttpURLConnection
+   connection.connectTimeout=3000;connection.readTimeout=3000;connection.instanceFollowRedirects=false
+   try{
+    when(connection.responseCode){
+     200->return bytes(connection.inputStream)
+     301,302,303,307,308->{
+      val next=java.net.URL(url,connection.getHeaderField("Location") ?: return null)
+      if(url.protocol=="https" && next.protocol!="https")return null
+      url=next
+     }
+     else->return null
+    }
+   }finally{connection.disconnect()}
+  }
+  return null
+ }
+ fun art(c:Context,value:String):Bitmap? = try {
+  val uri=Uri.parse(value)
+  if(uri.scheme=="plex-art")PlexFeed.art(c,uri) else {
+   val cached=artwork.get(value,android.os.SystemClock.elapsedRealtime())
+   val data=cached ?: when(uri.scheme){
+    "content","android.resource"->c.contentResolver.openInputStream(uri)?.let(::bytes)
+    "https","http"->remoteBytes(value)
+    else->null
+   }
+   if(data==null)null else {
+    val bounds=BitmapFactory.Options().apply{inJustDecodeBounds=true}
+    BitmapFactory.decodeByteArray(data,0,data.size,bounds)
+    val decoded=BitmapFactory.decodeByteArray(data,0,data.size,BitmapFactory.Options().apply{inSampleSize=BitmapPolicy.sampleSize(bounds.outWidth,bounds.outHeight,512,320)})
+    if(decoded!=null && cached==null)artwork.put(value,data,android.os.SystemClock.elapsedRealtime())
+    decoded
+   }
+  }
+ }catch(_:Exception){null}
 }

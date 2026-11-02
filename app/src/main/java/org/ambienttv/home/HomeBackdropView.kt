@@ -6,6 +6,8 @@ import android.view.View
 internal class HomeBackdropView(c:Context,private val sunrise:Boolean=false):View(c) {
  private var mountains:Bitmap?=null
  init {
+  // Cache the static multi-pass scenery on the GPU; focus changes only composite it.
+  setLayerType(View.LAYER_TYPE_HARDWARE,null)
   // Decode the static wallpaper without blocking the first focusable frame.
   Thread({val decoded=BitmapFactory.decodeResource(resources,if(sunrise)R.drawable.home_sunrise else R.drawable.home_mountains);post{mountains=decoded;invalidate()}},"tv-wallpaper").apply{isDaemon=true;start()}
  }

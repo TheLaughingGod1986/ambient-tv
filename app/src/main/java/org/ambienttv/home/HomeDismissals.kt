@@ -16,7 +16,9 @@ object HomeDismissalPolicy {
    val extras=link.substringAfter("#Intent;","").split(';').filter{it.isNotBlank() && !it.matches(Regex("(?:i|l|S)\\.(?:position|start|start_time|start_time_ms)=.*"))}.sorted().joinToString(";")
    URI(uri.scheme,uri.authority,uri.path,query,null).toString()+if(extras.isEmpty())""else "#Intent;"+extras
   }catch(_:Exception){decoded.replace(Regex(";(?:i|l|S)\\.(?:position|start|start_time|start_time_ms)=[^;]*"),"")}
-  return MessageDigest.getInstance("SHA-256").digest((owner+"|"+normalized).toByteArray()).joinToString(""){"%02x".format(it)}
+  val digest=MessageDigest.getInstance("SHA-256").digest((owner+"|"+normalized).toByteArray())
+  val hex="0123456789abcdef"
+  return buildString(64){digest.forEach{val byte=it.toInt() and 255;append(hex[byte ushr 4]);append(hex[byte and 15])}}
  }
  fun completed(position:Long,duration:Long):Boolean = position>0 && duration>0 && (position>=duration || duration-position<=minOf(30000L,(duration/20).coerceAtLeast(1)))
 }

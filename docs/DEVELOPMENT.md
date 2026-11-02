@@ -140,3 +140,29 @@ Settings shows the last successful sync and current cached count. Daily Home
 rotation still uses Europe/London and stores at most eight daily rows locally,
 preferring scenes absent from that recent history when the pool permits. Photo
 IDs remain in private preferences and are not logged or uploaded.
+
+## Responsive artwork and feed updates
+
+The static backdrop and visible photo/video cards use hardware layers to reuse
+static drawing between focus changes. Cards use native outline clipping
+on hardware and keep their path fallback for software previews. Neither changes
+the layout or image treatment.
+
+Video artwork has a two-worker executor for the visible tiles, separate from photo decoding and
+Plex catalog requests. Page changes discard queued obsolete work; generation
+checks reject stale results. A missing Home thumbnail gets one delayed retry and
+is retried on return if still absent. No continuous retry loop is used.
+
+Plex artwork reads an immutable source snapshot instead of waiting for the
+catalog/resume network monitor. Verified server connections are reused for up to
+15 minutes, with rediscovery on failure. Compressed artwork caches are bounded
+(4 MiB Plex, 3 MiB native feed), release under memory pressure and own bytes,
+not shared/recycled view bitmaps. Native artwork accepts bounded HTTP(S)
+redirects without allowing HTTPS downgrades.
+
+A separately debounced native-provider read can update YouTube cards while Plex
+is still refreshing. It reads only the Watch Next columns used by Home. YouTube
+must publish eligible progress; neither this path nor retries read private
+YouTube History or invent resume positions. The clean-emulator regression checks
+artwork redirects, cache reuse, invalid redirects and loading while Plex's
+metadata monitor is held, alongside the existing TV navigation checks.

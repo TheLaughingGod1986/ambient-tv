@@ -48,6 +48,9 @@ class HomeActivity:Activity() {
  private val focusViews=linkedMapOf<String,View>()
  private val worker=java.util.concurrent.ThreadPoolExecutor(1,1,0L,java.util.concurrent.TimeUnit.MILLISECONDS,java.util.concurrent.LinkedBlockingQueue<Runnable>())
  private val catalogWorker=java.util.concurrent.ThreadPoolExecutor(1,1,0L,java.util.concurrent.TimeUnit.MILLISECONDS,java.util.concurrent.LinkedBlockingQueue<Runnable>())
+ // Keep slow video artwork independent of family-photo decoding and Plex discovery.
+ private val artworkWorker=java.util.concurrent.ThreadPoolExecutor(2,2,0L,java.util.concurrent.TimeUnit.MILLISECONDS,java.util.concurrent.LinkedBlockingQueue<Runnable>())
+ private val nativeWorker=java.util.concurrent.ThreadPoolExecutor(1,1,0L,java.util.concurrent.TimeUnit.MILLISECONDS,java.util.concurrent.LinkedBlockingQueue<Runnable>())
  private val feedWorker=Executors.newSingleThreadExecutor()
  private val feedState=FeedRefreshState()
  private var feedActive=false
@@ -136,21 +139,21 @@ class HomeActivity:Activity() {
  }
  override fun onRequestPermissionsResult(code:Int,permissions:Array<out String>,results:IntArray){super.onRequestPermissionsResult(code,permissions,results);if(code==42 && page=="Home")showPage("Home")}
  override fun onNewIntent(intent:Intent) {super.onNewIntent(intent);setIntent(intent);if(intent.hasCategory(Intent.CATEGORY_HOME)){if(page!="Home")showPage("Home");refreshFeedOnReturn()}}
- override fun onResume() { super.onResume();if(compactLayout!=getSharedPreferences("home-ui",0).getBoolean("compactSidebar",false))showPage(page);handler.post(sidebarUpdate);feedActive=true;if(resumedOnce && page=="Home")updateHomePhotos();resumedOnce=true
+ override fun onResume() { super.onResume();if(compactLayout!=getSharedPreferences("home-ui",0).getBoolean("compactSidebar",false))showPage(page);handler.post(sidebarUpdate);feedActive=true;if(resumedOnce && page=="Home"){if(mediaBitmaps.size<displayedWatchItems.size)mediaSignature="";updateHomePhotos()};resumedOnce=true
   if(previewFiles==null && !observingFeed && Build.VERSION.SDK_INT>=26)try{contentResolver.registerContentObserver(android.media.tv.TvContract.WatchNextPrograms.CONTENT_URI,true,feedObserver);observingFeed=true}catch(_:Exception){}
   refreshFeedOnReturn();handler.removeCallbacks(feedPoll);handler.postDelayed(feedPoll,60000)
   handler.removeCallbacks(tick);handler.post(tick);if(previewFiles==null)WeatherStore.refresh(applicationContext)
  }
- override fun onPause() {rememberFocus();feedActive=false;feedState.pause();handler.removeCallbacks(feedRead);handler.removeCallbacks(feedPoll);handler.removeCallbacks(feedReturnRetry);handler.removeCallbacks(feedReturnFinalRetry)
+ override fun onPause() {rememberFocus();feedActive=false;feedState.pause();handler.removeCallbacks(feedRead);handler.removeCallbacks(nativeRead);nativeWorker.queue.clear();handler.removeCallbacks(feedPoll);handler.removeCallbacks(feedReturnRetry);handler.removeCallbacks(feedReturnFinalRetry)
   if(observingFeed){contentResolver.unregisterContentObserver(feedObserver);observingFeed=false};handler.removeCallbacks(tick);super.onPause() }
  override fun onTrimMemory(level:Int) {
   super.onTrimMemory(level)
-  if(level>=android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW)PlexFeed.trimArtwork()
+  if(level>=android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW)run{PlexFeed.trimArtwork();WatchNextReader.trimArtwork()}
  }
- override fun onLowMemory(){super.onLowMemory();PlexFeed.trimArtwork()}
- override fun onDestroy() { unregisterReceiver(homePress);epoch++;handler.removeCallbacksAndMessages(null);worker.shutdownNow();catalogWorker.shutdownNow();feedWorker.shutdownNow();if(::root.isInitialized)clearPage();super.onDestroy() }
+ override fun onLowMemory(){super.onLowMemory();run{PlexFeed.trimArtwork();WatchNextReader.trimArtwork()}}
+ override fun onDestroy() { unregisterReceiver(homePress);epoch++;handler.removeCallbacksAndMessages(null);worker.shutdownNow();artworkWorker.shutdownNow();nativeWorker.shutdownNow();catalogWorker.shutdownNow();feedWorker.shutdownNow();if(::root.isInitialized)clearPage();super.onDestroy() }
  private fun clearPage() {
-  sidebarAnimation?.cancel();sidebarExpanded=null;epoch++;mediaEpoch++;worker.queue.clear();catalogWorker.queue.clear();focusViews.clear();photoSlots.clear();mediaSignature=""
+  sidebarAnimation?.cancel();sidebarExpanded=null;epoch++;mediaEpoch++;worker.queue.clear();artworkWorker.queue.clear();nativeWorker.queue.clear();catalogWorker.queue.clear();focusViews.clear();photoSlots.clear();mediaSignature=""
   mediaBitmaps.forEach{if(!it.isRecycled)it.recycle()};mediaBitmaps.clear()
   fun detach(view:View){if(view is OrientationPhotoView)view.clear();if(view is ImageView)view.setImageDrawable(null);if(view is android.view.ViewGroup)for(i in 0 until view.childCount)detach(view.getChildAt(i))}
   detach(root);root.removeAllViews();bitmaps.forEach {if(!it.isRecycled)it.recycle()};bitmaps.clear()
@@ -434,7 +437,7 @@ class HomeActivity:Activity() {
       place(card,244+(position%5)*333,306+(position/5)*300,312,282)
       val image=card.getChildAt(0) as ImageView
       try{image.setImageDrawable(packageManager.getApplicationIcon("com.plexapp.android"));image.scaleType=ImageView.ScaleType.FIT_CENTER;image.setPadding(p(70),p(24),p(70),p(24))}catch(_:Exception){}
-      worker.execute imageJob@{if(token!=epoch)return@imageJob;val bitmap=if(item.thumb.isBlank())null else WatchNextReader.art(this,"plex-art://${item.server}/${item.key}");handler.post{if(token==epoch && bitmap!=null){bitmaps.add(bitmap);image.setPadding(0,0,0,0);image.scaleType=ImageView.ScaleType.FIT_CENTER;image.setImageBitmap(bitmap)}else bitmap?.recycle()}}
+      artworkWorker.execute imageJob@{if(token!=epoch)return@imageJob;val bitmap=if(item.thumb.isBlank())null else WatchNextReader.art(this,"plex-art://${item.server}/${item.key}");handler.post{if(token==epoch && bitmap!=null){bitmaps.add(bitmap);image.setPadding(0,0,0,0);image.scaleType=ImageView.ScaleType.FIT_CENTER;image.setImageBitmap(bitmap)}else bitmap?.recycle()}}
      }
      val navId=focusViews["nav:"+when(category){"TV Shows"->1;"Movies"->2;else->3}]?.id ?: View.NO_ID
      gridControls.forEachIndexed{i,v->v.nextFocusLeftId=if(i%5==0)navId else gridControls[i-1].id;v.nextFocusRightId=if(i%5==4 || i==gridControls.lastIndex)v.id else gridControls[i+1].id;v.nextFocusUpId=if(i<5)v.id else gridControls[i-5].id;v.nextFocusDownId=if(i+5<gridControls.size)gridControls[i+5].id else v.id}
@@ -591,12 +594,22 @@ class HomeActivity:Activity() {
   if(page=="Home"){handler.postDelayed(feedReturnRetry,5000);handler.postDelayed(feedReturnFinalRetry,15000)}
  }
  private val feedPoll=object:Runnable{override fun run(){if(feedActive){loadWatchNext(true);handler.postDelayed(this,60000)}}}
+ private val nativeRead=Runnable{
+  if(feedActive && page=="Home"){
+   val token=epoch
+   nativeWorker.queue.clear()
+   nativeWorker.execute{
+    val items=if(previewFiles!=null)previewWatch.orEmpty()else WatchNextReader.readNative(this)
+    handler.post{if(feedActive && token==epoch && page=="Home")applyWatchItems(items)}
+   }
+  }
+ }
  private val feedRead:Runnable=Runnable{
   val force=feedState.begin(feedActive && page=="Home")
   if(force!=null){
    val token=epoch
    feedWorker.execute{
-    val available=if(previewFiles!=null)previewWatch.orEmpty()else WatchNextReader.read(this,force){native->handler.post{if(feedActive && token==epoch && page=="Home" && !feedState.hasPending)applyWatchItems(native)}}
+    val available=if(previewFiles!=null)previewWatch.orEmpty()else WatchNextReader.read(this,force){native->handler.post{if(feedActive && token==epoch && page=="Home")applyWatchItems(native)}}
     handler.post{
      val current=feedState.finish()
      if(current && feedActive && token==epoch && page=="Home"){
@@ -610,7 +623,7 @@ class HomeActivity:Activity() {
  }
  private fun loadWatchNext(forcePlex:Boolean=false){
   if(page!="Home" || !::mediaHost.isInitialized)return
-  feedState.request(forcePlex);handler.removeCallbacks(feedRead);handler.postDelayed(feedRead,750)
+  feedState.request(forcePlex);handler.removeCallbacks(nativeRead);handler.postDelayed(nativeRead,250);handler.removeCallbacks(feedRead);handler.postDelayed(feedRead,750)
  }
  private fun applyWatchItems(source:List<WatchItem>){
   availableWatchItems=source
@@ -648,11 +661,16 @@ class HomeActivity:Activity() {
    val image=card.getChildAt(0) as ImageView
    try{image.setImageDrawable(packageManager.getApplicationIcon(item.owner))}catch(_:Exception){}
    image.scaleType=ImageView.ScaleType.FIT_CENTER;image.setPadding(p(90),p(14),p(90),p(60))
-   worker.execute imageJob@{
-    if(token!=epoch || revision!=mediaEpoch)return@imageJob
+   fun loadArt(retry:Boolean){artworkWorker.execute imageJob@{
+    if(token!=epoch || revision!=mediaEpoch || !feedActive)return@imageJob
     val bitmap=WatchNextReader.art(this,item.art)
-    handler.post{if(token==epoch && revision==mediaEpoch && bitmap!=null){mediaBitmaps.add(bitmap);image.setPadding(0,0,0,0);image.scaleType=ImageView.ScaleType.CENTER_CROP;image.setImageBitmap(bitmap)}else bitmap?.recycle()}
-   }
+    handler.post{
+     if(token!=epoch || revision!=mediaEpoch || isDestroyed)bitmap?.recycle()
+     else if(bitmap!=null){mediaBitmaps.add(bitmap);image.setPadding(0,0,0,0);image.scaleType=ImageView.ScaleType.CENTER_CROP;image.setImageBitmap(bitmap)}
+     else if(retry && feedActive)handler.postDelayed({if(feedActive && token==epoch && revision==mediaEpoch)loadArt(false)},3000)
+    }
+   }}
+   loadArt(true)
    watchedProgress?.let{actual->card.addView(ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply{max=1000;progress=actual;progressTintList=android.content.res.ColorStateList.valueOf(if(source=="YouTube")Color.rgb(255,36,62)else Color.rgb(66,205,235));progressBackgroundTintList=android.content.res.ColorStateList.valueOf(Color.rgb(70,78,92))},FrameLayout.LayoutParams(-1,p(4),Gravity.BOTTOM))}
   }
   wireFocus();if(focused!=null)(focusViews["media:$newIndex"] ?: focusViews["footer:0"])?.requestFocus()
