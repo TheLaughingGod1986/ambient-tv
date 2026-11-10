@@ -27,7 +27,6 @@ internal class HeroDreamView(c:Context,private val previewPanel:WeatherPanel?=nu
  }
  private val paint=Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
  private val normal=Typeface.create("sans-serif-light",Typeface.NORMAL)
- private val family=Typeface.create("cursive",Typeface.ITALIC)
  private val currentRect=RectF()
  private val previousRect=RectF()
  private val backdrop=RectF()
@@ -62,7 +61,10 @@ internal class HeroDreamView(c:Context,private val previewPanel:WeatherPanel?=nu
  }
  override fun updateHeader(){val now=System.currentTimeMillis()/60000;if(now!=minute){minute=now;timeText=timeFormat.format(Date());dateText=dateFormat.format(Date());panel=previewPanel ?: WeatherStore.panel(context);invalidate()}}
  override fun show(bitmap:Bitmap){showHero(bitmap,emptyList(),0)}
- fun showHero(bitmap:Bitmap,previews:List<Bitmap>,selection:Int,face:FaceRegion?=null,background:Bitmap?=null,framing:String="auto"){
+ private var caption:Pair<String,String?>?=null
+ /** [selection] marks one preview as the photo on screen; a negative value means the strip is what comes next. */
+ fun showHero(bitmap:Bitmap,previews:List<Bitmap>,selection:Int,face:FaceRegion?=null,background:Bitmap?=null,framing:String="auto",caption:Pair<String,String?>?=null){
+  this.caption=caption
   previous?.recycle();oldSoft?.recycle()
   previous=if(motionEnabled)current else null;oldSoft=if(motionEnabled)soft else null;oldEdge=if(motionEnabled)edge else null
   if(!motionEnabled){current?.recycle();soft?.recycle()}
@@ -78,7 +80,7 @@ internal class HeroDreamView(c:Context,private val previewPanel:WeatherPanel?=nu
   dotsLeft=(left+1860)/2-(count*23+(count-1).coerceAtLeast(0)*11)/2f
   for(i in 0 until count){thumbRects[i].offsetTo(left+i*300,664f)}
   for(i in 0 until count){val r=thumbRects[i];val zoom=maxOf(r.width()/previews[i].width,r.height()/previews[i].height);val w=previews[i].width*zoom;val h=previews[i].height*zoom;thumbImageRects[i].set(r.centerX()-w/2,r.centerY()-h/2,r.centerX()+w/2,r.centerY()+h/2)}
-  selected=selection.coerceIn(0,(previews.size-1).coerceAtLeast(0));changedAt=SystemClock.elapsedRealtime();invalidate()
+  selected=if(selection<0)-1 else selection.coerceIn(0,(previews.size-1).coerceAtLeast(0));changedAt=SystemClock.elapsedRealtime();invalidate()
  }
  private fun edgeShader(bitmap:Bitmap,rect:RectF,face:FaceRegion?):Shader? {
   val protectRight=face?.let{rect.left+it.right*rect.width()/bitmap.width}
@@ -104,7 +106,8 @@ internal class HeroDreamView(c:Context,private val previewPanel:WeatherPanel?=nu
    val zoom=maxOf(1952f/background.width,1100f/background.height);val bw=background.width*zoom;val bh=background.height*zoom
    backdrop.set(960-bw/2+drift,540-bh/2,960+bw/2+drift,540+bh/2)
    canvas.drawBitmap(background,null,backdrop,paint)
-   paint.color=Color.argb(alpha*45/255,0,6,12);canvas.drawRect(0f,0f,1920f,1080f,paint)
+   // A deep tint turns the blurred backdrop into a calm margin instead of a bright smear.
+   paint.color=Color.argb(alpha*120/255,0,6,12);canvas.drawRect(0f,0f,1920f,1080f,paint)
    paint.alpha=alpha
    canvas.drawBitmap(photo,null,rect,paint)
    if(blend!=null){
@@ -123,18 +126,25 @@ internal class HeroDreamView(c:Context,private val previewPanel:WeatherPanel?=nu
   paint.textSize=22f;canvas.drawText(AppPreferences.weatherLabel(context),1590f,500f,paint)
   val condition=android.text.TextUtils.ellipsize(panel.condition,android.text.TextPaint(paint),270f,android.text.TextUtils.TruncateAt.END).toString()
   canvas.drawText(condition,1590f,534f,paint)
-  paint.textSize=12f;paint.color=Color.rgb(210,222,231);canvas.drawText("open-meteo.com · CC BY 4.0",1490f,574f,paint)
+  val range=panel.range
+  if(range!=null){paint.textSize=20f;paint.color=Color.rgb(222,231,240);canvas.drawText(android.text.TextUtils.ellipsize(range,android.text.TextPaint(paint),370f,android.text.TextUtils.TruncateAt.END).toString(),1490f,574f,paint)}
+  paint.textSize=12f;paint.color=Color.rgb(210,222,231);canvas.drawText("open-meteo.com · CC BY 4.0",1490f,if(range!=null)606f else 574f,paint)
   }
   paint.textAlign=Paint.Align.LEFT
-  paint.typeface=family;paint.textSize=112f;paint.color=Color.WHITE;canvas.drawText("Explore",82f,850f,paint)
-  paint.typeface=normal;paint.textSize=20f;canvas.drawText("L I T T L E   M O M E N T S",82f,906f,paint);canvas.drawText("B I G   A D V E N T U R E S",82f,940f,paint);paint.strokeWidth=2f;canvas.drawLine(82f,966f,134f,966f,paint)
+  // The photo's own caption: when it was taken and, with a birthday saved, the age then. Nothing when unknown.
+  caption?.let{(whenTaken,age)->
+   paint.typeface=normal;paint.color=Color.WHITE;paint.textSize=54f;canvas.drawText(whenTaken,82f,if(age!=null)902f else 940f,paint)
+   if(age!=null){paint.textSize=30f;paint.color=Color.rgb(222,231,240);canvas.drawText(age,84f,950f,paint)}
+   paint.color=Color.WHITE;paint.strokeWidth=2f;canvas.drawLine(84f,978f,136f,978f,paint)
+  }
+  if(selected<0 && thumbs.isNotEmpty()){paint.typeface=normal;paint.textSize=18f;paint.color=Color.rgb(210,222,231);canvas.drawText("U P   N E X T",thumbRects[0].left+2f,646f,paint)}
   for(i in 0 until minOf(3,thumbs.size)){
    val r=thumbRects[i];clip.reset();clip.addRoundRect(r,14f,14f,Path.Direction.CW);canvas.save();canvas.clipPath(clip)
    paint.color=thumbColors[i];canvas.drawRect(r,paint)
    val photo=thumbs[i];backdrop.set(thumbImageRects[i])
    canvas.drawBitmap(photo,null,backdrop,paint);canvas.restore()
    paint.style=Paint.Style.STROKE;paint.strokeWidth=if(i==selected)3f else 1.5f;paint.color=if(i==selected)Color.rgb(255,236,204)else Color.argb(150,233,242,250);canvas.drawRoundRect(r,14f,14f,paint);paint.style=Paint.Style.FILL
-   paint.color=if(i==selected)Color.WHITE else Color.argb(100,240,248,255);canvas.drawRoundRect(dotsLeft+i*34,970f,dotsLeft+23+i*34,978f,4f,4f,paint)
+   if(selected>=0){paint.color=if(i==selected)Color.WHITE else Color.argb(100,240,248,255);canvas.drawRoundRect(dotsLeft+i*34,970f,dotsLeft+23+i*34,978f,4f,4f,paint)}
   }
   if(current==null){paint.textAlign=Paint.Align.CENTER;paint.typeface=normal;paint.textSize=32f;paint.color=Color.WHITE;canvas.drawText("No cached photos available",700f,540f,paint)}
   canvas.restore();if(previous!=null)postInvalidateDelayed(100)

@@ -92,6 +92,7 @@ class PhotoDreamService:DreamService() {
    var face:FaceRegion?=null
    var heroBackground:Bitmap?=null
    var framing="auto"
+   var caption:Pair<String,String?>?=null
    try {
     if(files.isNotEmpty()) {
      if(heroStyle){
@@ -100,9 +101,11 @@ class PhotoDreamService:DreamService() {
       bitmap=PhotoDecoding.load(files[currentIndex]);face=bitmap?.let{HeroComposition.detect(it)}
       heroBackground=bitmap?.let{HeroBackdrop.create(it,face)}
       count=1
-      val indices=HeroGeometry.previewIndices(files.size,currentIndex)
-      val loaded=indices.mapNotNull {index->try {PhotoDecoding.load(files[index],640,640)?.let{index to it}}catch(_:Exception){null}}
-      previews=loaded.map{it.second};selection=loaded.indexOfFirst{it.first==currentIndex}.coerceAtLeast(0)
+      // The strip shows what comes next, so nothing on it repeats the photo on screen.
+      val indices=HeroGeometry.upNext(files.size,currentIndex)
+      previews=indices.mapNotNull {index->try {PhotoDecoding.load(files[index],640,640)}catch(_:Exception){null}};selection=-1
+      val times=try{org.json.JSONObject(getSharedPreferences("state",0).getString("photoTimes","{}").orEmpty())}catch(_:Exception){org.json.JSONObject()}
+      caption=PhotoCaption.lines(PhotoCaption.seconds(files[currentIndex].name,times),System.currentTimeMillis(),AppPreferences.birthdaySeconds(applicationContext))
      } else {
      val candidates=DreamPolicy.indices(files.size,startIndex,3).map { files[it] }
      val sizes=candidates.map {
@@ -117,12 +120,12 @@ class PhotoDreamService:DreamService() {
      }
     }
    } catch(_:Exception) { /* Retain a previous frame on cache/decoder failure; weather/time remain live. */ }
-   val result=bitmap;val columns=count;val coveragePercent=fitPercent;val previewImages=previews;val selectedPreview=selection;val heroFace=face;val cachedBackdrop=heroBackground
+   val result=bitmap;val columns=count;val coveragePercent=fitPercent;val previewImages=previews;val selectedPreview=selection;val heroFace=face;val cachedBackdrop=heroBackground;val heroCaption=caption
    handler.post {
     rendering=false
     if(!active || token!=generation) { result?.recycle();cachedBackdrop?.recycle();previewImages.forEach{it.recycle()};return@post }
     if(result!=null) {
-     if(picture is HeroDreamView)(picture as HeroDreamView).showHero(result,previewImages,selectedPreview,heroFace,cachedBackdrop,framing) else picture.show(result)
+     if(picture is HeroDreamView)(picture as HeroDreamView).showHero(result,previewImages,selectedPreview,heroFace,cachedBackdrop,framing,heroCaption) else picture.show(result)
      startIndex=PhotoPoolPolicy.nextCursor(startIndex,columns,files.size)
      getSharedPreferences("dream",0).edit().putInt("cursor",startIndex).putString("cursorGeneration",sequenceKey).apply()
      val state=getSharedPreferences("dream-state",0)

@@ -49,5 +49,7 @@ class PhotoCaptionTest {
   assertEquals("A year ago today",PhotoCaption.headline(day("2025-11-10"),now,null,Locale.UK))
   assertEquals("3 October 2024  ·  3 weeks old",PhotoCaption.detail(day("2024-10-03"),birth,Locale.UK))
   assertNull(PhotoCaption.headline(0,now,birth,Locale.UK));assertNull(PhotoCaption.detail(0,birth,Locale.UK))
+  assertEquals("October 2024" to "3 weeks old",PhotoCaption.lines(day("2024-10-03"),now,birth,Locale.UK))
+  assertEquals("October 2024" to null,PhotoCaption.lines(day("2024-10-03"),now,null,Locale.UK))
  }
 }

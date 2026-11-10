@@ -44,7 +44,7 @@ object Photos {
     stage = "recent photos and older memories"
     val excluded=state.getStringSet("excludedPhotoIds",emptySet()) ?: emptySet()
     val earliest=try{PhotoDatePolicy.parse(AppPreferences.earliestPhotoDay(c))}catch(_:IllegalArgumentException){null}
-    val catalog=api.photoCatalog(person).filter{it.getInt("id").toString() !in excluded && PhotoDatePolicy.keep(it.getLong("time"),earliest)}
+    val catalog=api.photoCatalog(person).filter{it.getInt("id").toString() !in excluded && PhotoDatePolicy.keep(it.getLong("time"),earliest) && !PhotoPoolPolicy.isScreenshot(it.optString("filename"))}
     if(catalog.isEmpty() && earliest!=null)throw SafeFailure("No photos of this person on or after the earliest date; previous photos kept")
     require(catalog.isNotEmpty())
     val recent = catalog.take(PhotoPoolPolicy.LIMIT)
@@ -61,7 +61,9 @@ object Photos {
     val favourites=PhotoPoolPolicy.keptFavourites(c.getSharedPreferences("favourites",0).getStringSet("ids",emptySet()).orEmpty(),catalog.map{it.getInt("id")}.toSet())
     val selectedIds=(favourites+pinned+anniversaries+mixedIds).distinct().take(PhotoPoolPolicy.LIMIT)
     val byId=catalog.associateBy{it.getInt("id")}
-    val items=selectedIds.map{byId.getValue(it)}
+    // Shown in a spread-out order so near-identical burst shots are not neighbours on the screensaver.
+    val byTime=selectedIds.map{byId.getValue(it)}.sortedBy{it.getLong("time")}
+    val items=PhotoPoolPolicy.spread(byTime.size).map{byTime[it]}
     val nextArchiveOffset=if(older.isEmpty())0 else (archiveOffset+PhotoMixPolicy.MEMORIES)%older.size
     require(items.isNotEmpty())
     val deadline = android.os.SystemClock.elapsedRealtime() + 120000

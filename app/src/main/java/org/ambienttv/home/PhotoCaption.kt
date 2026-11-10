@@ -34,9 +34,12 @@ internal object PhotoCaption {
   return (today.get(java.util.Calendar.YEAR)-then.get(java.util.Calendar.YEAR)).takeIf{it>=1}
  }
  /** Home caption: "2 years ago today" on an anniversary, otherwise the month, then the age when known. */
- fun headline(taken:Long,now:Long,birth:Long?,locale:Locale=Locale.getDefault()):String? {
+ fun headline(taken:Long,now:Long,birth:Long?,locale:Locale=Locale.getDefault()):String? =
+  lines(taken,now,birth,locale)?.let{listOfNotNull(it.first,it.second).joinToString("  ·  ")}
+ /** The same caption as two lines for the screensaver: when it was taken, then the age if known. */
+ fun lines(taken:Long,now:Long,birth:Long?,locale:Locale=Locale.getDefault()):Pair<String,String?>? {
   val whenTaken=yearsAgoToday(taken,now)?.let{if(it==1)"A year ago today" else "$it years ago today"} ?: monthYear(taken,locale) ?: return null
-  return listOfNotNull(whenTaken,age(taken,birth)).joinToString("  ·  ")
+  return whenTaken to age(taken,birth)
  }
  /** Viewer caption: the full date, then the age when known. */
  fun detail(taken:Long,birth:Long?,locale:Locale=Locale.getDefault()):String? {
