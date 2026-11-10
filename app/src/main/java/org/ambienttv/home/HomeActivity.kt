@@ -460,7 +460,7 @@ class HomeActivity:Activity() {
   val selected=chosen.toMutableList().also{if(spare!=null)it[2]=spare}
   val titles=listOf("Featured memory","Browse photos",if(spare!=null)"Another memory" else "Favourites","All Photos")
   val descriptions=listOf(if(photoCount==0)"No cached photos" else extras.featuredDate ?: "Our favourite moments","All your family memories",
-   if(spare!=null)extras.spareDate ?: "Open to add it to favourites" else if(favourite==null)"No favourites yet" else "Saved by you","$photoCount cached photos")
+   if(spare!=null)extras.spareDate ?: "Open to add it to favourites" else if(favourite==null)"No favourites yet" else "Saved by you","$photoCount photos")
   fun load(view:OrientationPhotoView,file:File?,wide:Boolean,placeholder:View?) {
    if(!view.request(file?.name))return
    if(file==null){view.show(null,null);return}
@@ -588,7 +588,7 @@ class HomeActivity:Activity() {
   heading(if(favs)"Favourites" else "Your photos")
   val files=if(favs)favourites() else photoFiles()
   galleryIndex=galleryIndex.coerceIn(0,maxOf(0,(files.size-1)/8));val pages=(files.size+7)/8
-  subheading((if(favs)"Saved by you · ${files.size} "+(if(files.size==1)"photo" else "photos") else "Family memories · ${files.size} cached photos")+if(pages>1)" · Page ${galleryIndex+1} of $pages" else "",1050)
+  subheading((if(favs)"Saved by you · ${files.size} "+(if(files.size==1)"photo" else "photos") else "Family memories · ${files.size} photos")+if(pages>1)" · Page ${galleryIndex+1} of $pages" else "",1050)
   val chips=listOf(tile("Favourites",selected=favs){galleryPage(true)},tile("All",selected=!favs){galleryPage(false)})
   chips.forEachIndexed{i,v->place(v,1530+i*184,236,174,58)}
   if(files.isEmpty()) place(text(if(favs)"Open a photo to add it to your favourites." else "No cached photos yet. Open connection settings.",28),244,340,1450,90)
