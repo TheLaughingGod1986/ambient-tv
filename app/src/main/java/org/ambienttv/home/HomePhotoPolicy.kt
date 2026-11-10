@@ -23,6 +23,8 @@ object HomePhotoPolicy {
   * never the sides where other people stand. Without a detected face the picture is enlarged
   * only until about a third of its height is off screen, trimmed a little more from the bottom than the top.
   */
+ /** Below this width-to-height ratio a photo counts as upright. */
+ const val UPRIGHT=1.1f
  private const val MIN_VISIBLE=.66f
  fun featureFrame(w:Int,h:Int,tw:Int,th:Int,face:FaceRegion?):PhotoFrame {
   val ratio=w.toFloat()/h;val target=tw.toFloat()/th
@@ -83,6 +85,11 @@ object HomeLayout {
  const val LEFT=244;const val RIGHT=1888;const val PHOTO_Y=244;const val PHOTO_W=396;const val PHOTO_H=338;const val GAP=20
  /** Plex library grid: two rows of tiles (poster area above a title strip) that end above the pager row. */
  const val LIBRARY_Y=306;const val POSTER_H=234;const val LIBRARY_CARD_H=298;const val PAGER_Y=944
+ /** Eight poster-shaped cards a row, so a page shows 16 titles with little space beside each poster. */
+ const val LIBRARY_COLUMNS=8;const val LIBRARY_CARD_W=190
+ fun libraryX(column:Int):Int {require(column in 0 until LIBRARY_COLUMNS);return LEFT+column*(RIGHT-LEFT-LIBRARY_CARD_W)/(LIBRARY_COLUMNS-1)}
+ /** Each half of the widest photo tile when it shows two upright photos, leaving a 6px gap. */
+ const val PAIR_W=330
  const val MEDIA_HEADING_Y=764;const val MEDIA_Y=824;const val MEDIA_W=396;const val MEDIA_H=223;const val DOCK_Y=654;const val DOCK_H=100
  fun photoWidth(index:Int)=when(index){0->666;1->492;else->446}
  fun photoX(index:Int)=when(index){0->LEFT;1->930;else->1442}

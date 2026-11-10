@@ -12,8 +12,9 @@ class PlexPagingTest {
  @Test fun partialAndEmptyLibrariesNeverInventExtraPosters(){
   for(n in 0..10){val pool=items(n);assertEquals(n,PlexCatalogPolicy.page(pool+pool,0).size);assertTrue(PlexCatalogPolicy.page(pool,1).isEmpty())}
  }
- @Test fun allBoundedPagesContainAtMostTwoCompleteFiveColumnRows(){
-  val pool=items(100)
-  for(i in 0..9)assertEquals(10,PlexCatalogPolicy.page(pool,i).size)
+ @Test fun allBoundedPagesContainTwoCompleteRows(){
+  assertEquals(2*HomeLayout.LIBRARY_COLUMNS,PlexCatalogPolicy.PAGE_SIZE)
+  val pool=items(10*PlexCatalogPolicy.PAGE_SIZE)
+  for(i in 0..9)assertEquals(PlexCatalogPolicy.PAGE_SIZE,PlexCatalogPolicy.page(pool,i).size)
  }
 }

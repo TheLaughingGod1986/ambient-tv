@@ -75,7 +75,7 @@ class HomeActivity:Activity() {
  private var mediaSignature=nothingDrawn
  private var currentWatchItems=emptyList<WatchItem>()
  private var availableWatchItems=emptyList<WatchItem>()
- private data class PhotoSlot(val image:OrientationPhotoView,val detail:TextView,val placeholder:ImageView,val title:TextView,val icon:ImageView)
+ private data class PhotoSlot(val image:OrientationPhotoView,val detail:TextView,val placeholder:ImageView,val title:TextView,val icon:ImageView,val partner:OrientationPhotoView?=null)
  @Volatile private var epoch=0
  private var scale=1f
  private var nextId=1000
@@ -268,6 +268,9 @@ class HomeActivity:Activity() {
  private fun subheading(value:String,width:Int=1500) { place(text(value,24).apply{setTextColor(quietColor)},244,236,width,48) }
  private fun updateHeader() {
   if(!::header.isInitialized) return
+  // Evening dimming sits over the whole page, focus highlight included.
+  val dim=previewFiles==null && DimPolicy.active(System.currentTimeMillis(),AppPreferences.dimEvening(this))
+  if(dim!=(root.foreground!=null))root.foreground=if(dim)android.graphics.drawable.ColorDrawable(Color.argb(DimPolicy.ALPHA,0,0,0)) else null
   header.update(previewWeather ?: WeatherStore.panel(this))
   clock.text=run {
    val now=Date();val time=SimpleDateFormat("HH:mm",Locale.getDefault()).format(now);val date=SimpleDateFormat("EEE, d MMM",Locale.getDefault()).format(now)
@@ -297,6 +300,8 @@ class HomeActivity:Activity() {
   for(i in titles.indices) {
    val card=ClippedPhotoCard(this,14*scale).apply{id=nextId++;isFocusable=true;isFocusableInTouchMode=true;isClickable=true;background=rounded(Color.rgb(17,35,49),false);foreground=states(photoOutline(true),photoOutline(false));contentDescription=titles[i];setOnClickListener{actions[i]()}}
    val image=OrientationPhotoView(this,true);card.addView(image,FrameLayout.LayoutParams(if(i<2)-1 else p(300),-1,Gravity.RIGHT))
+   // The widest tile can hold a second upright photo beside the first; hidden until one is paired.
+   val partner=if(i==0)OrientationPhotoView(this,true).apply{visibility=View.GONE}.also{card.addView(it,FrameLayout.LayoutParams(p(HomeLayout.PAIR_W),-1,Gravity.RIGHT))} else null
    val placeholder=ImageView(this).apply{setImageDrawable(HomeNavIcon(icons[i]).apply{setTint(Color.rgb(164,191,210))})};card.addView(placeholder,if(i<2)FrameLayout.LayoutParams(p(70),p(70),Gravity.CENTER).apply{bottomMargin=p(30)}else FrameLayout.LayoutParams(p(70),p(70),Gravity.RIGHT or Gravity.CENTER_VERTICAL).apply{rightMargin=p(115)})
    card.addView(View(this).apply{background=GradientDrawable(if(i<2)GradientDrawable.Orientation.TOP_BOTTOM else GradientDrawable.Orientation.RIGHT_LEFT,if(i<2)intArrayOf(Color.TRANSPARENT,Color.argb(242,4,10,18))else intArrayOf(Color.TRANSPARENT,Color.argb(180,15,32,54),Color.rgb(15,32,54)))},FrameLayout.LayoutParams(-1,if(i<2)p(170)else -1,Gravity.BOTTOM))
    val caption=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL;setPadding(p(20),0,p(16),p(16))}
@@ -305,7 +310,7 @@ class HomeActivity:Activity() {
    val title=text(titles[i],26).apply{typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL);maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END};words.addView(title)
    val detail=text("",18).apply{setTextColor(Color.rgb(204,216,228));maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END};words.addView(detail)
    caption.addView(words,LinearLayout.LayoutParams(0,-2,1f));caption.addView(text("›",44).apply{gravity=Gravity.CENTER;importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO},LinearLayout.LayoutParams(p(34),p(56)));card.addView(caption,FrameLayout.LayoutParams(-1,p(94),if(i<2)Gravity.BOTTOM else Gravity.CENTER_VERTICAL))
-   photoSlots.add(PhotoSlot(image,detail,placeholder,title,icon));focusViews["photo:$i"]=card
+   photoSlots.add(PhotoSlot(image,detail,placeholder,title,icon,partner));focusViews["photo:$i"]=card
    place(card,HomeLayout.photoX(i),HomeLayout.photoY(i),HomeLayout.photoWidth(i),HomeLayout.photoHeight(i))
   }
   updateHomePhotos()
@@ -410,13 +415,17 @@ class HomeActivity:Activity() {
     if(ta>0 && tb>0 && kotlin.math.abs(ta-tb)<1800)return true
     return signature(a)?.let{x->signature(b)?.let{y->HomePhotoSimilarity.similar(x,y)}}==true
    }
-   val selected=DailyHomeSelection.select(files.map(::id),favs.map(::id).toSet(),day,
+   val picked=DailyHomeSelection.select(files.map(::id),favs.map(::id).toSet(),day,
     if(same)saved else emptyList(),recent,
     {a,b->related(files.first{ id(it)==a },files.first{ id(it)==b })},
     {id,slot->val file=files.first{ id(it)==id };val target=if(slot>=2)245f/170f else HomeLayout.photoWidth(slot).toFloat()/HomeLayout.photoHeight(slot)
      val ratio=ratios[file] ?: 1f;kotlin.math.abs(kotlin.math.ln(ratio.coerceAtLeast(.01f)/target)).toDouble()},
     {a,b->val x=signature(files.first{id(it)==a});val y=signature(files.first{id(it)==b});if(x==null || y==null)1.0 else HomePhotoSimilarity.colourDistance(x,y)})
    if(token!=epoch)return@execute
+   // A photo taken on this day in an earlier year leads the row, in place of whatever was chosen there.
+   val nowMillis=System.currentTimeMillis()
+   val anniversary=files.firstOrNull{PhotoCaption.yearsAgoToday(PhotoCaption.seconds(it.name,times),nowMillis)!=null}?.let(::id)
+   val selected=if(anniversary==null || picked.firstOrNull()==anniversary)picked else picked.mapIndexed{slot,key->if(slot==0)anniversary else if(key==anniversary)picked[0] else key}
    photoSelectionKey=selectionKey;selectedPhotoIds=selected
    if(previewFiles==null)prefs.edit().putInt("row-version",7).putLong("row-day",day).putString("row-ids",selected.joinToString(","){it.orEmpty()}).putString("previous-row",yesterday.joinToString(",")).putString("recent-rows",RecentPhotoHistory.encode(RecentPhotoHistory.remember(history,day,selected))).apply()
    val selectedFiles=selected.map{key->files.firstOrNull{id(it)==key}}
@@ -425,12 +434,24 @@ class HomeActivity:Activity() {
   }
  }
  /** Worker thread only: the featured photo's real month, and a spare photo for the third tile. */
- private class HomeExtras(val featuredDate:String?,val spare:File?,val spareDate:String?)
+ private class HomeExtras(val featuredDate:String?,val spare:File?,val spareDate:String?,val partner:File?)
  private fun homeExtras(selected:List<File?>,files:List<File>,day:Long):HomeExtras {
   val times=try{org.json.JSONObject(getSharedPreferences("state",0).getString("photoTimes","{}").orEmpty())}catch(_:Exception){org.json.JSONObject()}
-  fun month(file:File?)=file?.let{PhotoCaption.monthYear(PhotoCaption.seconds(it.name,times))}
+  val now=System.currentTimeMillis();val birth=AppPreferences.birthdaySeconds(this)
+  fun caption(file:File?)=file?.let{PhotoCaption.headline(PhotoCaption.seconds(it.name,times),now,birth)}
   val spare=if(selected.getOrNull(2)!=null)null else PhotoCaption.extra(files.map{it.name},selected.map{it?.name},day)?.let{name->files.firstOrNull{it.name==name}}
-  return HomeExtras(month(selected.getOrNull(0)),spare,month(spare))
+  // An upright featured photo is paired with another upright one so the wide tile is filled by both.
+  fun upright(file:File):Boolean {val o=android.graphics.BitmapFactory.Options().apply{inJustDecodeBounds=true};android.graphics.BitmapFactory.decodeFile(file.path,o);return o.outWidth>0 && o.outHeight>0 && o.outWidth<o.outHeight*HomePhotoPolicy.UPRIGHT}
+  val featured=selected.getOrNull(0)
+  val partner=if(featured==null || !upright(featured))null else {
+   val shown=selected.map{it?.name}+spare?.name
+   var left=files.map{it.name}
+   var found:File?=null
+   // Step through the day's stable order until an upright photo turns up; a small pool may have none.
+   repeat(minOf(files.size,12)){if(found==null){val name=PhotoCaption.extra(left,shown,day+1);val file=files.firstOrNull{it.name==name};if(file==null)return@repeat;if(upright(file))found=file else left=left-file.name}}
+   found
+  }
+  return HomeExtras(caption(featured),spare,caption(spare),partner)
  }
  private fun bindHomePhotos(chosen:List<File?>,photoCount:Int,extras:HomeExtras) {
   val favourite=chosen[2]
@@ -440,6 +461,20 @@ class HomeActivity:Activity() {
   val titles=listOf("Featured memory","Browse photos",if(spare!=null)"Another memory" else "Favourites","All Photos")
   val descriptions=listOf(if(photoCount==0)"No cached photos" else extras.featuredDate ?: "Our favourite moments","All your family memories",
    if(spare!=null)extras.spareDate ?: "Open to add it to favourites" else if(favourite==null)"No favourites yet" else "Saved by you","$photoCount cached photos")
+  fun load(view:OrientationPhotoView,file:File?,wide:Boolean,placeholder:View?) {
+   if(!view.request(file?.name))return
+   if(file==null){view.show(null,null);return}
+   // The wide cards need more pixels than the small stacked pair.
+   val maxWidth=if(wide)1024 else 512;val maxHeight=if(wide)1080 else 512
+   val key=PhotoThumbs.key(file,maxWidth,maxHeight)
+   PhotoThumbs.get(key)?.let{saved->view.show(saved.photo,saved.fill,saved.face);return}
+   val token=epoch;val request=view.requestVersion
+   worker.execute {
+    if(token!=epoch || view.requestVersion!=request)return@execute
+    val entry=decodeThumb(file,maxWidth,maxHeight,faces=true)?.also{PhotoThumbs.put(key,it)}
+    handler.post{if(token==epoch && view.requestVersion==request && !isDestroyed){view.show(entry?.photo,entry?.fill,entry?.face);placeholder?.visibility=if(entry==null)View.VISIBLE else View.GONE}}
+   }
+  }
   photoSlots.forEachIndexed{i,slot->
    slot.title.text=titles[i];slot.detail.text=descriptions[i];focusViews["photo:$i"]?.contentDescription=titles[i]+", "+descriptions[i]
    if(i==2){
@@ -447,19 +482,15 @@ class HomeActivity:Activity() {
     focusViews["photo:2"]?.setOnClickListener{if(spare!=null)openPhoto(spare) else galleryPage(true)}
    }
    val file=selected[i];if(i==0)focusViews["photo:0"]?.setOnClickListener{file?.let{openPhoto(it)} ?: galleryPage(false)};slot.placeholder.visibility=if(file==null)View.VISIBLE else View.GONE
-   if(slot.image.request(file?.name)) {
-    if(file==null){slot.image.show(null,null);return@forEachIndexed}
-    // The two wide cards need more pixels than the small stacked pair.
-    val maxWidth=if(i<2)1024 else 512;val maxHeight=if(i<2)1080 else 512
-    val key=PhotoThumbs.key(file,maxWidth,maxHeight)
-    PhotoThumbs.get(key)?.let{saved->slot.image.show(saved.photo,saved.fill,saved.face);return@forEachIndexed}
-    val token=epoch;val request=slot.image.requestVersion
-    worker.execute {
-     if(token!=epoch || slot.image.requestVersion!=request)return@execute
-     val entry=decodeThumb(file,maxWidth,maxHeight,faces=true)?.also{PhotoThumbs.put(key,it)}
-     handler.post{if(token==epoch && slot.image.requestVersion==request && !isDestroyed){slot.image.show(entry?.photo,entry?.fill,entry?.face);slot.placeholder.visibility=if(entry==null)View.VISIBLE else View.GONE}}
-    }
+   slot.partner?.let{partner->
+    val pair=if(file!=null)extras.partner else null
+    // Paired: two equal halves with a slim gap. Alone: the photo takes the whole tile as before.
+    val width=if(pair!=null)p(HomeLayout.PAIR_W) else -1
+    if(slot.image.layoutParams.width!=width)slot.image.layoutParams=FrameLayout.LayoutParams(width,-1,Gravity.LEFT)
+    partner.visibility=if(pair!=null)View.VISIBLE else View.GONE
+    load(partner,pair,true,null)
    }
+   load(slot.image,file,i<2,slot.placeholder)
   }
  }
  /** Worker thread only. A detected face lets a Home tile fill its frame without cutting that face. */
@@ -481,7 +512,7 @@ class HomeActivity:Activity() {
   card.setOnClickListener { action() }
   return card
  }
- /** Shared Plex tile: the whole poster over a soft fill of itself, above a separate two-line title. */
+ /** Shared Plex tile: a poster-shaped card showing the whole poster above a separate two-line title. */
  private fun libraryCard(label:String,action:()->Unit):FrameLayout {
   val card=ClippedPhotoCard(this,14*scale).apply {
    id=nextId++;isFocusable=true;isFocusableInTouchMode=true;isClickable=true
@@ -490,9 +521,9 @@ class HomeActivity:Activity() {
   }
   card.addView(OrientationPhotoView(this).apply{importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO},FrameLayout.LayoutParams(-1,p(HomeLayout.POSTER_H)))
   card.addView(ImageView(this).apply{setImageDrawable(HomeNavIcon("Movies").apply{setTint(Color.rgb(96,124,150))});importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO},FrameLayout.LayoutParams(p(56),p(56),Gravity.CENTER_HORIZONTAL).apply{topMargin=p((HomeLayout.POSTER_H-56)/2)})
-  card.addView(text(label,22).apply {
+  card.addView(text(label,19).apply {
    maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END
-   gravity=Gravity.CENTER_VERTICAL;setPadding(p(16),0,p(16),0)
+   gravity=Gravity.CENTER_VERTICAL;setPadding(p(10),0,p(10),0)
    typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
   },FrameLayout.LayoutParams(-1,p(HomeLayout.LIBRARY_CARD_H-HomeLayout.POSTER_H),Gravity.BOTTOM))
   return card
@@ -514,7 +545,7 @@ class HomeActivity:Activity() {
      result.items.forEachIndexed{position,item->
       val card=libraryCard(item.title){WatchItem(item.title,"com.plexapp.android",PlexProtocol.detailUri(item.server,item.key),"",-1,-1).open(this)}
       gridControls.add(card)
-      place(card,244+(position%5)*333,HomeLayout.LIBRARY_Y+(position/5)*(HomeLayout.LIBRARY_CARD_H+HomeLayout.GAP),312,HomeLayout.LIBRARY_CARD_H)
+      place(card,HomeLayout.libraryX(position%HomeLayout.LIBRARY_COLUMNS),HomeLayout.LIBRARY_Y+(position/HomeLayout.LIBRARY_COLUMNS)*(HomeLayout.LIBRARY_CARD_H+HomeLayout.GAP),HomeLayout.LIBRARY_CARD_W,HomeLayout.LIBRARY_CARD_H)
       val poster=card.getChildAt(0) as OrientationPhotoView;val placeholder=card.getChildAt(1)
       poster.request(item.key);val version=poster.requestVersion
       val art=if(preview!=null)item.thumb else "plex-art://${item.server}/${item.key}"
@@ -534,7 +565,7 @@ class HomeActivity:Activity() {
      if(index>0)pageButton("Previous page"){showCatalogPage(category,index-1)}
      if(result.hasMore)pageButton("Next page"){showCatalogPage(category,index+1)}
      pageButton("Refresh"){showCatalogPage(category,index,refresh=true)}
-     wireGrid(gridControls,5,pager)
+     wireGrid(gridControls,HomeLayout.LIBRARY_COLUMNS,pager)
      // After paging or Refresh, focus returns to the same button when the new page still has it,
      // so Next can be pressed again; otherwise to the first poster. Focus that moved on is left alone.
      val desired=catalogFocusAfterLoad;catalogFocusAfterLoad=null

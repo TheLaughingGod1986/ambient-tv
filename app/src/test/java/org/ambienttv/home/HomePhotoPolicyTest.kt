@@ -55,6 +55,14 @@ class HomePhotoPolicyTest {
   val f=HomePhotoPolicy.featureFrame(1600,900,360,350,FaceRegion(700f,300f,900f,560f))
   assertTrue(f.left>=0 && f.left+f.width<=360.01)
  }
+ @Test fun posterGridAndPairedPhotosFitTheirRows(){
+  assertEquals(HomeLayout.LEFT,HomeLayout.libraryX(0))
+  assertEquals(HomeLayout.RIGHT,HomeLayout.libraryX(HomeLayout.LIBRARY_COLUMNS-1)+HomeLayout.LIBRARY_CARD_W)
+  for(c in 1 until HomeLayout.LIBRARY_COLUMNS)assertTrue(HomeLayout.libraryX(c)-HomeLayout.libraryX(c-1)>=HomeLayout.LIBRARY_CARD_W+12)
+  assertTrue(2*HomeLayout.PAIR_W<HomeLayout.photoWidth(0) && 2*HomeLayout.PAIR_W>=HomeLayout.photoWidth(0)-10)
+  val half=HomePhotoPolicy.featureFrame(900,1200,HomeLayout.PAIR_W,HomeLayout.photoHeight(0),null)
+  assertTrue("an upright photo fills half of the wide tile",half.width>=HomeLayout.PAIR_W-.5f && half.height>=HomeLayout.photoHeight(0)-.5f)
+ }
  @Test fun heroAndThreeCompanionsKeepTheOriginalRowBounds() {
   assertTrue(HomeLayout.photoWidth(0)>HomeLayout.photoWidth(1)*1.3f)
   assertEquals(HomeLayout.RIGHT,HomeLayout.photoX(3)+HomeLayout.photoWidth(3))

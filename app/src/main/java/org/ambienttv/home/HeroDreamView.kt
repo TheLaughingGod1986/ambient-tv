@@ -18,6 +18,13 @@ interface SaverDisplay {
 }
 /** Reference-inspired single hero. Original photo is composed around its detected face without distortion. */
 internal class HeroDreamView(c:Context,private val previewPanel:WeatherPanel?=null):View(c),SaverDisplay {
+ private var dimMinute=-1L;private var dimmed=false
+ /** Evening dimming is drawn over the finished frame, so every layout gets it the same way. */
+ override fun draw(canvas:Canvas){
+  super.draw(canvas)
+  val now=System.currentTimeMillis();if(now/60000!=dimMinute){dimMinute=now/60000;dimmed=DimPolicy.active(now,AppPreferences.dimEvening(context))}
+  if(dimmed)canvas.drawColor(Color.argb(DimPolicy.ALPHA,0,0,0))
+ }
  private val paint=Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
  private val normal=Typeface.create("sans-serif-light",Typeface.NORMAL)
  private val family=Typeface.create("cursive",Typeface.ITALIC)
