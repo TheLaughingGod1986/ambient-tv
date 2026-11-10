@@ -2,7 +2,9 @@ package org.ambienttv.home
 import org.json.JSONObject
 import java.net.URLEncoder
 
-data class PlexResume(val server:String,val ratingKey:String,val title:String,val thumb:String,val position:Long,val duration:Long,val engagedAt:Long,val nextEpisode:Boolean=false)
+data class PlexResume(val server:String,val ratingKey:String,val title:String,val thumb:String,val position:Long,val duration:Long,val engagedAt:Long,val nextEpisode:Boolean=false,
+ /** "movie" or "episode" as the server reports it; the fields below are blank or -1 when it does not say. */
+ val type:String="",val show:String="",val season:Int=-1,val episode:Int=-1,val poster:String="",val section:String="",val showKey:String="")
 object PlexProtocol {
  fun parseHub(server:String,body:JSONObject,allowNextEpisodes:Boolean=false):List<PlexResume>{
   require(server.matches(Regex("[A-Za-z0-9_-]{1,128}")))
@@ -20,7 +22,11 @@ object PlexProtocol {
    val title=if(parent.isNotEmpty())"$parent · $rawTitle" else rawTitle
    val thumb=item.optString("thumb").ifBlank{item.optString("grandparentThumb")}
    if(!thumb.startsWith("/library/") || thumb.contains("..") || thumb.contains('?'))continue
-   result.add(PlexResume(server,key,title,thumb,if(nextEpisode)0 else position,duration,item.optLong("lastViewedAt",0),nextEpisode))
+   fun art(name:String)=item.optString(name).takeIf{it.startsWith("/library/") && !it.contains("..") && !it.contains('?')}.orEmpty()
+   val poster=art("grandparentThumb").ifBlank{if(item.optString("type")=="movie")art("thumb") else ""}
+   result.add(PlexResume(server,key,title,thumb,if(nextEpisode)0 else position,duration,item.optLong("lastViewedAt",0),nextEpisode,
+    item.optString("type"),parent,item.optInt("parentIndex",-1),item.optInt("index",-1),poster,item.optString("librarySectionTitle").trim(),
+    item.optString("grandparentRatingKey").takeIf{it.matches(Regex("[0-9]{1,16}"))}.orEmpty()))
   }
   return result.distinctBy{it.server+":"+it.ratingKey}.take(12)
  }

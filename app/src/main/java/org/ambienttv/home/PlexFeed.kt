@@ -20,7 +20,11 @@ internal object PlexFeed {
  private fun publishArtwork(){
   val next=mutableMapOf<String,ArtSource>()
   catalogThumbs.forEach{(key,thumb)->servers[key.substringBefore(':')]?.let{next[key]=ArtSource(it,thumb,true)}}
-  cached.forEach{item->servers[item.server]?.let{next[item.server+":"+item.ratingKey]=ArtSource(it,item.thumb,false)}}
+  cached.forEach{item->servers[item.server]?.let{
+   next[item.server+":"+item.ratingKey]=ArtSource(it,item.thumb,false)
+   // The library pages show the series or film poster for an in-progress item, under its own key.
+   if(item.poster.isNotBlank())next[item.server+":p"+item.ratingKey]=ArtSource(it,item.poster,true)
+  }}
   artSources=next.toMap()
  }
  private var discoveredAt=0L
@@ -28,7 +32,7 @@ internal object PlexFeed {
  fun hasSession(c:Context)=PlexApi.vault(c).read()!=null
  fun status(c:Context)=c.getSharedPreferences("plex-status",0).getString("message","Connect Plex to add its Continue Watching items.")!!
  private fun status(c:Context,s:String){c.getSharedPreferences("plex-status",0).edit().putString("message",s).apply()}
- private fun resetSessionCache(){artSources=emptyMap();servers.clear();catalogThumbs.clear();catalogPages.clear();artwork.clear();cached=emptyList();discoveredAt=0;refreshedAt=0;WatchNextReader.clearDirectPlex()}
+ private fun resetSessionCache(){artSources=emptyMap();servers.clear();catalogThumbs.clear();catalogPages.clear();animeTags.clear();artwork.clear();cached=emptyList();discoveredAt=0;refreshedAt=0;WatchNextReader.clearDirectPlex()}
  @Synchronized fun acceptSession(c:Context,token:String){resetSessionCache();HomeDismissals.rotatePlexScope(c);PlexApi.vault(c).save("https://plex.tv",token)}
  @Synchronized fun clear(c:Context){PlexApi.vault(c).clear();resetSessionCache();status(c,"Plex disconnected from Ambient TV.")}
  @Synchronized fun read(c:Context,force:Boolean=false):List<WatchItem>{
@@ -112,9 +116,28 @@ internal object PlexFeed {
   val bounds=BitmapFactory.Options().apply{inJustDecodeBounds=true};BitmapFactory.decodeByteArray(bytes,0,bytes.size,bounds)
   return bounds.outWidth in 1..20000 && bounds.outHeight in 1..20000
  }
- @Synchronized fun catalog(c:Context,category:String,page:Int,refresh:Boolean=false):PlexCatalogPage{
-  require(category in listOf("Movies","TV Shows","Anime") && page in 0..9)
-  val cacheKey="$category:$page"
+ // Whether the server's own tags mark a film or series as anime; asked once per title and kept for the session.
+ private val animeTags=mutableMapOf<String,Boolean>()
+ /** In-progress items for one library page, most recently watched first. Empty when nothing qualifies. */
+ @Synchronized fun continueFor(c:Context,category:String):List<PlexResume>{
+  require(category in listOf("Movies","TV Shows","Anime"))
+  read(c)
+  return cached.filter{item->
+   val tagged=category=="Anime" && !PlexCatalogPolicy.namedAnime(item.section) && item.type in listOf("movie","episode") && animeTagged(c,item)
+   PlexResumePolicy.inCategory(item,category,tagged)
+  }.sortedByDescending{it.engagedAt}
+ }
+ private fun animeTagged(c:Context,item:PlexResume):Boolean{
+  val key=item.showKey.ifBlank{item.ratingKey};val server=servers[item.server] ?: return false
+  return animeTags.getOrPut(item.server+":"+key){try{
+   val entry=JSONObject(String(PlexApi.request(c,server.base+"/library/metadata/$key",server.token),Charsets.UTF_8)).optJSONObject("MediaContainer")?.optJSONArray("Metadata")?.optJSONObject(0)
+   fun tags(name:String)=entry?.optJSONArray(name)?.let{a->(0 until a.length()).mapNotNull{a.optJSONObject(it)?.optString("tag")}} ?: emptyList()
+   PlexCatalogPolicy.animeMetadata(tags("Genre"),tags("Country"))
+  }catch(_:Exception){return false}} // a failed lookup is not remembered, so it is asked again next time
+ }
+ @Synchronized fun catalog(c:Context,category:String,page:Int,refresh:Boolean=false,size:Int=PlexCatalogPolicy.PAGE_SIZE):PlexCatalogPage{
+  require(category in listOf("Movies","TV Shows","Anime") && page in 0..9 && size in 1..PlexCatalogPolicy.PAGE_SIZE)
+  val cacheKey="$category:$page:$size"
   // Refresh forgets every kept page of this library, not only the one shown: neighbouring
   // pages kept from before could otherwise skip or repeat a title once the list has shifted.
   if(refresh)catalogPages.keys.removeAll{it.startsWith("$category:")}
@@ -123,7 +146,7 @@ internal object PlexFeed {
   }
   read(c)
   if(servers.isEmpty())throw IllegalStateException("Connect Plex or check your server connection.")
-  val count=(page+1)*PlexCatalogPolicy.PAGE_SIZE;val all=mutableListOf<PlexPoster>();val names=mutableListOf<String>();var total=0;var scanned=0
+  val count=(page+1)*size;val all=mutableListOf<PlexPoster>();val names=mutableListOf<String>();var total=0;var scanned=0
   for(server in servers.values.toList()){
    val sections=JSONObject(String(PlexApi.request(c,server.base+"/library/sections",server.token),Charsets.UTF_8)).optJSONObject("MediaContainer")?.optJSONArray("Directory") ?: continue
    for(i in 0 until minOf(sections.length(),16)){
@@ -153,10 +176,10 @@ internal object PlexFeed {
     total+=body.optJSONObject("MediaContainer")?.optInt("totalSize",parsed.size) ?: parsed.size
    }
   }
-  val items=PlexCatalogPolicy.page(all,page)
+  val items=PlexCatalogPolicy.page(all,page,size)
   publishCatalog(items)
   c.getSharedPreferences("plex-catalog-audit",0).edit().putString("category",category).putInt("page",page).putInt("count",items.size).putString("sections",org.json.JSONArray(names).toString()).apply()
-  val result=PlexCatalogPage(items,page<9 && total>(page+1)*PlexCatalogPolicy.PAGE_SIZE,names)
+  val result=PlexCatalogPage(items,page<9 && total>(page+1)*size,names)
   // An empty answer is never kept: a library that has just gained items should show them.
   if(items.isNotEmpty())catalogPages[cacheKey]=android.os.SystemClock.elapsedRealtime() to result else catalogPages.remove(cacheKey)
   return result
