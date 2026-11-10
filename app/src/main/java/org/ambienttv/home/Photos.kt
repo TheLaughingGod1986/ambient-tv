@@ -57,7 +57,9 @@ object Photos {
     val pinned=if(daily.getLong("row-day",Long.MIN_VALUE)==HomePhotoPolicy.localDay(now,java.util.TimeZone.getTimeZone("Europe/London")))daily.getString("row-ids","").orEmpty().split(',').mapNotNull{it.substringBefore('.').toIntOrNull()}.filter{id->catalog.any{it.getInt("id")==id}}else emptyList()
     // Up to four photos taken on this day in earlier years join the pool so Home can lead with one.
     val anniversaries=catalog.filter{PhotoCaption.yearsAgoToday(it.getLong("time"),now)!=null}.take(4).map{it.getInt("id")}
-    val selectedIds=(pinned+anniversaries+mixedIds).distinct().take(PhotoPoolPolicy.LIMIT)
+    // A favourite stays on the TV until it is removed, whatever the recent/memory rotation picks.
+    val favourites=PhotoPoolPolicy.keptFavourites(c.getSharedPreferences("favourites",0).getStringSet("ids",emptySet()).orEmpty(),catalog.map{it.getInt("id")}.toSet())
+    val selectedIds=(favourites+pinned+anniversaries+mixedIds).distinct().take(PhotoPoolPolicy.LIMIT)
     val byId=catalog.associateBy{it.getInt("id")}
     val items=selectedIds.map{byId.getValue(it)}
     val nextArchiveOffset=if(older.isEmpty())0 else (archiveOffset+PhotoMixPolicy.MEMORIES)%older.size
