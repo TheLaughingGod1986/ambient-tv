@@ -101,6 +101,9 @@ class HomeActivity:Activity() {
  private var sidebarScrim:View?=null
  private val navViews=mutableListOf<TextView>()
  private var compactLayout=false
+ private val homeCards=mutableListOf<Pair<View,PhotoSlot>>()
+ private val navTiles=mutableMapOf<String,TextView>()
+ private val navBackgrounds=mutableMapOf<Pair<String,Boolean>,Drawable>()
  private var sidebarExpanded:Boolean?=null
  private val sidebarNames=listOf("Home","TV Shows","Movies","Anime","Apps","Photos","Search","Settings")
  private val sidebarUpdate=Runnable{updateSidebar()}
@@ -151,7 +154,8 @@ class HomeActivity:Activity() {
  }
  override fun onRequestPermissionsResult(code:Int,permissions:Array<out String>,results:IntArray){super.onRequestPermissionsResult(code,permissions,results);if(code==42 && page=="Home")showPage("Home")}
  override fun onNewIntent(intent:Intent) {super.onNewIntent(intent);setIntent(intent);if(intent.hasCategory(Intent.CATEGORY_HOME)){if(page!="Home")showPage("Home");refreshFeedOnReturn()}}
- override fun onResume() { super.onResume();if(compactLayout!=getSharedPreferences("home-ui",0).getBoolean("compactSidebar",false))showPage(page);handler.post(sidebarUpdate);feedActive=true
+ override fun onResume() { super.onResume();updateHeader() // settings may have changed weather or dimming while away
+  if(compactLayout!=getSharedPreferences("home-ui",0).getBoolean("compactSidebar",false))showPage(page);handler.post(sidebarUpdate);feedActive=true
   // The viewer can remove a favourite; show the Favourites grid as it is now.
   if(resumedOnce && page=="Photos" && galleryFavourites && favourites().map{it.name}!=galleryNames)showPage("Photos")
   if(resumedOnce && page=="Home"){if(mediaArtShown<displayedWatchItems.size)mediaSignature=nothingDrawn;updateHomePhotos()};resumedOnce=true
@@ -175,8 +179,14 @@ class HomeActivity:Activity() {
  private fun clearPage() {
   sidebarScrim?.animate()?.cancel();sidebarScrim=null;navViews.clear();sidebarExpanded=null;epoch++;mediaEpoch++;worker.queue.clear();artworkWorker.queue.clear();nativeWorker.queue.clear();catalogWorker.queue.clear();appsWorker.queue.clear();focusViews.clear();photoSlots.clear();mediaSignature=nothingDrawn
   mediaArtShown=0
-  fun detach(view:View){if(view is OrientationPhotoView)view.clear();if(view is ImageView)view.setImageDrawable(null);if(view is android.view.ViewGroup)for(i in 0 until view.childCount)detach(view.getChildAt(i))}
-  detach(root)
+  // Photos and artwork are released everywhere. Icons inside the reused Home tiles are part of the tile and stay.
+  val kept=homeCards.map{it.first}
+  fun detach(view:View,reused:Boolean){
+   if(view is OrientationPhotoView)view.clear()
+   if(view is ImageView && !reused)view.setImageDrawable(null)
+   if(view is android.view.ViewGroup){val inside=reused || kept.any{it===view};for(i in 0 until view.childCount)detach(view.getChildAt(i),inside)}
+  }
+  detach(root,false)
   // The backdrop stays attached, so its rendered layer survives page changes.
   if(::backdrop.isInitialized && root.childCount>0 && root.getChildAt(0)===backdrop)root.removeViews(1,root.childCount-1)else root.removeAllViews()
  }
@@ -217,16 +227,21 @@ class HomeActivity:Activity() {
   compactLayout=getSharedPreferences("home-ui",0).getBoolean("compactSidebar",false);page=name;clearPage()
   if(!::backdrop.isInitialized)backdrop=HomeBackdropView(this,true)
   if(backdrop.parent==null)root.addView(backdrop,0,FrameLayout.LayoutParams(-1,-1))
-  header=HomeWeatherView(this);place(header,244,38,600,110)
-  clock=text("",38).apply { gravity=Gravity.RIGHT or Gravity.CENTER_VERTICAL };place(clock,1458,40,430,118);updateHeader()
+  // The header, clock and side menu are the same on every page, so they are built once and re-attached.
+  if(!::header.isInitialized)header=HomeWeatherView(this)
+  place(header,244,38,600,110)
+  if(!::clock.isInitialized)clock=text("",38).apply { gravity=Gravity.RIGHT or Gravity.CENTER_VERTICAL }
+  place(clock,1458,40,430,118);updateHeader(pageChange=true)
   val names=sidebarNames
   var first:View?=null
   names.forEachIndexed { index,label ->
-   val nav=tile(label){if(label=="Photos")galleryPage(false)else showPage(label)}
-   val icon=HomeNavIcon(if(label=="TV Shows")"TV" else label);icon.setBounds(0,0,p(30),p(30));icon.setTint(titleColor)
-   nav.setTextSize(TypedValue.COMPLEX_UNIT_PX,22*scale);nav.setPadding(p(17),p(8),p(12),p(8));nav.compoundDrawablePadding=p(14);nav.setCompoundDrawables(icon,null,null,null)
+   val nav=navTiles.getOrPut(label){tile(label){if(label=="Photos")galleryPage(false)else showPage(label)}.also{made->
+    val icon=HomeNavIcon(if(label=="TV Shows")"TV" else label);icon.setBounds(0,0,p(30),p(30));icon.setTint(titleColor)
+    made.setTextSize(TypedValue.COMPLEX_UNIT_PX,22*scale);made.setPadding(p(17),p(8),p(12),p(8));made.setCompoundDrawables(icon,null,null,null)
+   }}
+   nav.compoundDrawablePadding=p(14);nav.nextFocusRightId=View.NO_ID
    // The current page is marked quietly, so a pale fill always means "this has focus".
-   nav.background=states(rounded(Color.rgb(228,239,248),true),if(label==name)rounded(Color.argb(52,228,239,248),false,Color.argb(84,228,239,248))else ColorDrawable(Color.TRANSPARENT))
+   nav.background=navBackgrounds.getOrPut(label to (label==name)){states(rounded(Color.rgb(228,239,248),true),if(label==name)rounded(Color.argb(52,228,239,248),false,Color.argb(84,228,239,248))else ColorDrawable(Color.TRANSPARENT))}
    focusViews["nav:$index"]=nav;navViews.add(nav)
    place(nav,24,182+index*84,180,66);if(label==name)first=nav
   }
@@ -266,8 +281,13 @@ class HomeActivity:Activity() {
  private fun heading(value:String) { place(text(value,46).apply{typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)},244,174,1500,65) }
  private val quietColor=Color.rgb(204,216,228)
  private fun subheading(value:String,width:Int=1500) { place(text(value,24).apply{setTextColor(quietColor)},244,236,width,48) }
- private fun updateHeader() {
+ private var headerMinute=-1L
+ /** A page change inside the same minute keeps the header as it is; the minute tick and a weather answer always refresh it. */
+ private fun updateHeader(pageChange:Boolean=false) {
   if(!::header.isInitialized) return
+  val minute=System.currentTimeMillis()/60000
+  if(pageChange && minute==headerMinute)return
+  headerMinute=minute
   // Evening dimming sits over the whole page, focus highlight included.
   val dim=previewFiles==null && DimPolicy.active(System.currentTimeMillis(),AppPreferences.dimEvening(this))
   if(dim!=(root.foreground!=null))root.foreground=if(dim)android.graphics.drawable.ColorDrawable(Color.argb(DimPolicy.ALPHA,0,0,0)) else null
@@ -297,7 +317,8 @@ class HomeActivity:Activity() {
   val actions=listOf<()->Unit>(
    {photoFiles().firstOrNull()?.let{openPhoto(it)} ?: safeStart(Intent(this,SettingsActivity::class.java))},
    {galleryPage(false)},{galleryPage(true)},{galleryPage(false)})
-  for(i in titles.indices) {
+  // The four photo tiles are built once; each visit re-attaches them and binds the day's photos again.
+  if(homeCards.isEmpty())for(i in titles.indices) {
    val card=ClippedPhotoCard(this,14*scale).apply{id=nextId++;isFocusable=true;isFocusableInTouchMode=true;isClickable=true;background=rounded(Color.rgb(17,35,49),false);foreground=states(photoOutline(true),photoOutline(false));contentDescription=titles[i];setOnClickListener{actions[i]()}}
    val image=OrientationPhotoView(this,true);card.addView(image,FrameLayout.LayoutParams(if(i<2)-1 else p(300),-1,Gravity.RIGHT))
    // The widest tile can hold a second upright photo beside the first; hidden until one is paired.
@@ -310,7 +331,10 @@ class HomeActivity:Activity() {
    val title=text(titles[i],26).apply{typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL);maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END};words.addView(title)
    val detail=text("",18).apply{setTextColor(Color.rgb(204,216,228));maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END};words.addView(detail)
    caption.addView(words,LinearLayout.LayoutParams(0,-2,1f));caption.addView(text("›",44).apply{gravity=Gravity.CENTER;importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO},LinearLayout.LayoutParams(p(34),p(56)));card.addView(caption,FrameLayout.LayoutParams(-1,p(94),if(i<2)Gravity.BOTTOM else Gravity.CENTER_VERTICAL))
-   photoSlots.add(PhotoSlot(image,detail,placeholder,title,icon,partner));focusViews["photo:$i"]=card
+   homeCards.add(card to PhotoSlot(image,detail,placeholder,title,icon,partner))
+  }
+  homeCards.forEachIndexed{i,(card,slot)->
+   photoSlots.add(slot);focusViews["photo:$i"]=card
    place(card,HomeLayout.photoX(i),HomeLayout.photoY(i),HomeLayout.photoWidth(i),HomeLayout.photoHeight(i))
   }
   updateHomePhotos()
@@ -325,7 +349,8 @@ class HomeActivity:Activity() {
   for((label,pkg,subtitle) in listOf(Triple("YouTube","com.google.android.youtube.tv","Watch videos together"),Triple("Plex","com.plexapp.android","Movies & TV shows"),Triple("Photos","com.synology.projectkailash","Open Synology Photos")))
    dock.add(DockItem(label,subtitle,AppIcons.load(this,pkg) ?: HomeNavIcon("Apps").apply{setTint(titleColor)}){launchPackage(pkg)})
   // Inputs the owner pinned in TV & inputs follow the apps; a missing input is simply left out.
-  val inputs=passthroughInputs()
+  // Asking the TV for its inputs is slow, so it is skipped when nothing is pinned.
+  val inputs=if((0 until HomeShortcuts.SLOTS).all{AppPreferences.shortcutInput(this,it).isBlank()})emptyList() else passthroughInputs()
   for(slot in 0 until HomeShortcuts.SLOTS){
    val input=inputs.firstOrNull{it.first==AppPreferences.shortcutInput(this,slot)} ?: continue
    dock.add(DockItem(AppPreferences.shortcutName(this,slot),input.second,HomeNavIcon("Game").apply{setTint(titleColor)}){safeStart(input.third)})
@@ -536,26 +561,59 @@ class HomeActivity:Activity() {
    if(token!=epoch)return@execute
    try{
     val preview=previewCatalog
-    val result=preview?.invoke(category,index) ?: PlexFeed.catalog(this,category,index,refresh)
+    // What is being watched in this library leads the page; it then shares the page with one row of additions.
+    val watching=if(preview!=null)emptyList() else try{PlexFeed.continueFor(this,category).take(HomeLayout.LIBRARY_COLUMNS)}catch(_:Exception){emptyList()}
+    val size=if(watching.isEmpty())PlexCatalogPolicy.PAGE_SIZE else HomeLayout.LIBRARY_COLUMNS
+    val result=preview?.invoke(category,index) ?: PlexFeed.catalog(this,category,index,refresh,size)
     handler.post{
      if(token!=epoch || isFinishing)return@post
      root.removeView(loading)
-     subheading("Latest additions · Plex"+if(index>0)" · Page ${index+1}" else "")
-     val gridControls=mutableListOf<View>()
-     result.items.forEachIndexed{position,item->
-      val card=libraryCard(item.title){WatchItem(item.title,"com.plexapp.android",PlexProtocol.detailUri(item.server,item.key),"",-1,-1).open(this)}
-      gridControls.add(card)
-      place(card,HomeLayout.libraryX(position%HomeLayout.LIBRARY_COLUMNS),HomeLayout.LIBRARY_Y+(position/HomeLayout.LIBRARY_COLUMNS)*(HomeLayout.LIBRARY_CARD_H+HomeLayout.GAP),HomeLayout.LIBRARY_CARD_W,HomeLayout.LIBRARY_CARD_H)
+     val latest="Latest additions · Plex"+if(index>0)" · Page ${index+1}" else ""
+     fun loadPoster(card:FrameLayout,key:String,art:String,hasArt:Boolean){
       val poster=card.getChildAt(0) as OrientationPhotoView;val placeholder=card.getChildAt(1)
-      poster.request(item.key);val version=poster.requestVersion
-      val art=if(preview!=null)item.thumb else "plex-art://${item.server}/${item.key}"
+      poster.request(key);val version=poster.requestVersion
       val saved=ArtThumbs.get("poster:$art")
       if(saved!=null){poster.show(saved.photo,saved.fill);placeholder.visibility=View.GONE}
-      else if(item.thumb.isNotBlank())artworkWorker.execute imageJob@{
+      else if(hasArt)artworkWorker.execute imageJob@{
        if(token!=epoch)return@imageJob
        val entry=WatchNextReader.art(this,art)?.let{ThumbEntry(it,OrientationPhotoView.softFill(it))}?.also{ArtThumbs.put("poster:$art",it)}
        handler.post{if(token==epoch && poster.requestVersion==version && entry!=null){poster.show(entry.photo,entry.fill);placeholder.visibility=View.GONE}}
       }
+     }
+     val watchingCards=mutableListOf<View>()
+     if(watching.isEmpty())subheading(latest) else {
+      subheading("Continue watching")
+      place(text(latest,24).apply{setTextColor(quietColor)},244,HomeLayout.LATEST_LABEL_Y,1500,40)
+      watching.forEachIndexed{position,item->
+       val name=PlexResumePolicy.name(item);val detail=PlexResumePolicy.detail(item)
+       val card=libraryCard(name){WatchItem(item.title,"com.plexapp.android",PlexProtocol.detailUri(item.server,item.ratingKey),"",-1,-1).open(this)}
+       card.contentDescription=listOf(name,detail).filter{it.isNotEmpty()}.joinToString(", ")
+       (card.getChildAt(2) as TextView).apply{
+        // One line for the name and one for where it was left, so a long title cannot push the progress line out.
+        val shown=if(detail.isEmpty())name else android.text.TextUtils.ellipsize(name,paint,p(HomeLayout.LIBRARY_CARD_W-22).toFloat(),android.text.TextUtils.TruncateAt.END).toString()
+        text=if(detail.isEmpty())name else android.text.SpannableString("$shown\n$detail").apply{
+         setSpan(android.text.style.RelativeSizeSpan(.84f),shown.length+1,length,0)
+         setSpan(android.text.style.ForegroundColorSpan(quietColor),shown.length+1,length,0)
+        }
+       }
+       // A bar along the foot of the poster shows how far through it is; a next episode has none.
+       val share=PlexResumePolicy.progress(item)
+       if(share>0f){
+        card.addView(View(this).apply{setBackgroundColor(Color.argb(150,3,10,17))},FrameLayout.LayoutParams(-1,p(6)).apply{topMargin=p(HomeLayout.POSTER_H-6)})
+        card.addView(View(this).apply{setBackgroundColor(Color.rgb(120,200,255))},FrameLayout.LayoutParams((p(HomeLayout.LIBRARY_CARD_W)*share).toInt().coerceAtLeast(p(4)),p(6)).apply{topMargin=p(HomeLayout.POSTER_H-6)})
+       }
+       watchingCards.add(card)
+       place(card,HomeLayout.libraryX(position),HomeLayout.CONTINUE_Y,HomeLayout.LIBRARY_CARD_W,HomeLayout.LIBRARY_CARD_H)
+       loadPoster(card,"watching:"+item.ratingKey,"plex-art://${item.server}/p${item.ratingKey}",item.poster.isNotBlank())
+      }
+     }
+     val gridTop=if(watching.isEmpty())HomeLayout.LIBRARY_Y else HomeLayout.LATEST_ROW_Y
+     val gridControls=mutableListOf<View>()
+     result.items.forEachIndexed{position,item->
+      val card=libraryCard(item.title){WatchItem(item.title,"com.plexapp.android",PlexProtocol.detailUri(item.server,item.key),"",-1,-1).open(this)}
+      gridControls.add(card)
+      place(card,HomeLayout.libraryX(position%HomeLayout.LIBRARY_COLUMNS),gridTop+(position/HomeLayout.LIBRARY_COLUMNS)*(HomeLayout.LIBRARY_CARD_H+HomeLayout.GAP),HomeLayout.LIBRARY_CARD_W,HomeLayout.LIBRARY_CARD_H)
+      loadPoster(card,item.key,if(preview!=null)item.thumb else "plex-art://${item.server}/${item.key}",item.thumb.isNotBlank())
      }
      val navId=focusViews["nav:"+when(category){"TV Shows"->1;"Movies"->2;else->3}]?.id ?: View.NO_ID
      if(result.items.isEmpty())place(text(if(category=="Anime")"No Anime library, Anime genre, or Japanese animation was found." else "No items found in this Plex category.",28),244,340,1500,110)
@@ -565,12 +623,14 @@ class HomeActivity:Activity() {
      if(index>0)pageButton("Previous page"){showCatalogPage(category,index-1)}
      if(result.hasMore)pageButton("Next page"){showCatalogPage(category,index+1)}
      pageButton("Refresh"){showCatalogPage(category,index,refresh=true)}
-     wireGrid(gridControls,HomeLayout.LIBRARY_COLUMNS,pager)
+     wireGrid(gridControls,HomeLayout.LIBRARY_COLUMNS,pager,watchingCards)
+     // Right from the sidebar lands on what is being watched when that row is present.
+     watchingCards.firstOrNull()?.let{first->navViews.forEach{it.nextFocusRightId=first.id}}
      // After paging or Refresh, focus returns to the same button when the new page still has it,
      // so Next can be pressed again; otherwise to the first poster. Focus that moved on is left alone.
      val desired=catalogFocusAfterLoad;catalogFocusAfterLoad=null
      if(desired==null)restoreFocus()
-     else if(root.findFocus()?.id==navId)((gridControls+pager).firstOrNull{it.contentDescription?.toString()==desired} ?: gridControls.firstOrNull() ?: pager.firstOrNull())?.requestFocus()
+     else if(root.findFocus()?.id==navId)((watchingCards+gridControls+pager).firstOrNull{it.contentDescription?.toString()==desired} ?: watchingCards.firstOrNull() ?: gridControls.firstOrNull() ?: pager.firstOrNull())?.requestFocus()
     }
    }catch(_:Exception){handler.post{if(token==epoch){loading.text="Could not load this Plex library. Check your server connection.";val retry=tile("Retry"){showCatalogPage(category,index)};val connect=tile("Plex connection"){safeStart(Intent(this,PlexConnectActivity::class.java))};place(retry,244,360,300,80);place(connect,570,360,400,80);wireGrid(listOf(retry,connect),2)}}}
   }

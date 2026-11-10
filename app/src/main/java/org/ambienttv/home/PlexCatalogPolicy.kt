@@ -5,11 +5,11 @@ data class PlexPoster(val server:String,val key:String,val title:String,val thum
 data class PlexCatalogPage(val items:List<PlexPoster>,val hasMore:Boolean,val sections:List<String>)
 object PlexCatalogPolicy {
  const val PAGE_SIZE=16
- fun page(items:List<PlexPoster>,index:Int):List<PlexPoster> {
-  require(index in 0..9)
+ fun page(items:List<PlexPoster>,index:Int,size:Int=PAGE_SIZE):List<PlexPoster> {
+  require(index in 0..9 && size in 1..PAGE_SIZE)
   return items.distinctBy{it.server+":"+it.key}
    .sortedWith(compareByDescending<PlexPoster>{it.addedAt}.thenBy{it.server}.thenBy{it.key})
-   .drop(index*PAGE_SIZE).take(PAGE_SIZE)
+   .drop(index*size).take(size)
  }
 
  fun namedAnime(name:String)=Regex("(^|[^a-z])anime([^a-z]|$)|アニメ",RegexOption.IGNORE_CASE).containsMatchIn(name)

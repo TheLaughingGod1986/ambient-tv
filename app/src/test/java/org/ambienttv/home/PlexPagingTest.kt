@@ -17,4 +17,10 @@ class PlexPagingTest {
   val pool=items(10*PlexCatalogPolicy.PAGE_SIZE)
   for(i in 0..9)assertEquals(PlexCatalogPolicy.PAGE_SIZE,PlexCatalogPolicy.page(pool,i).size)
  }
+ @Test fun aSmallerPageSizePagesTheSameListWithoutGapsOrRepeats(){
+  val pool=items(37);val row=HomeLayout.LIBRARY_COLUMNS
+  val pages=(0..4).flatMap{PlexCatalogPolicy.page(pool,it,row)}
+  assertEquals(37,pages.size);assertEquals(37,pages.distinct().size)
+  assertEquals(PlexCatalogPolicy.page(pool,0).take(row),PlexCatalogPolicy.page(pool,0,row))
+ }
 }

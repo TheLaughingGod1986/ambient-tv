@@ -88,6 +88,8 @@ object HomeLayout {
  /** Eight poster-shaped cards a row, so a page shows 16 titles with little space beside each poster. */
  const val LIBRARY_COLUMNS=8;const val LIBRARY_CARD_W=190
  fun libraryX(column:Int):Int {require(column in 0 until LIBRARY_COLUMNS);return LEFT+column*(RIGHT-LEFT-LIBRARY_CARD_W)/(LIBRARY_COLUMNS-1)}
+ /** With a Continue watching row: that row, the label for the latest additions, then one row of them. */
+ const val CONTINUE_Y=292;const val LATEST_LABEL_Y=594;const val LATEST_ROW_Y=638
  /** Each half of the widest photo tile when it shows two upright photos, leaving a 6px gap. */
  const val PAIR_W=330
  const val MEDIA_HEADING_Y=764;const val MEDIA_Y=824;const val MEDIA_W=396;const val MEDIA_H=223;const val DOCK_Y=654;const val DOCK_H=100

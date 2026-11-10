@@ -35,6 +35,11 @@ photo upload or API key is required. Your existing services may have their own t
 views on an emulator. They contain no personal photos or account history. Weather
 and media accounts are not connected. They are not photographs of a household TV.*
 
+## New in 0.2.7
+
+- TV Shows, Movies and Anime start with a Continue watching row for that library: the series or film poster, how far through it is, the season and episode, the time left, or "Next episode" when Plex offers one. One row of latest additions follows; with nothing in progress the page shows two rows as before.
+- Faster page changes: the side menu, header and Home's photo tiles are built once and reused, and Home no longer asks the TV for its inputs unless one is pinned.
+
 ## New in 0.2.6
 
 - Ages in the first year include weeks, such as "2 months, 1 week old", so photos a few weeks apart no longer show the same age.

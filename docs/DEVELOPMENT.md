@@ -189,6 +189,26 @@ are not. A refreshed pool is stored in `PhotoPoolPolicy.spread` order: sorted by
 capture time, then stepped through about 38% at a time, so burst shots are not
 shown back to back.
 
+## Continue watching on library pages
+
+`PlexFeed.continueFor` filters the same Continue Watching hub that feeds Home, so
+progress and next episodes still come only from the server. `PlexResumePolicy`
+mirrors the library pages: Movies and TV Shows leave out libraries named for anime,
+and Anime takes those plus titles whose own genre and country tags mark them as
+anime, asked once per title per session. A card shows the series or film poster
+under its own artwork key, a progress bar, and "S2 E5 · 20 min left" or "Next
+episode". When the row is present the page asks for one row of additions
+(`size` in `PlexFeed.catalog`), so paging stays gap-free at either size.
+
+## Page-change cost
+
+On the TV used for checking, building a page on the UI thread was the main cost of
+a page change. The side menu tiles, the header, the clock and Home's four photo
+tiles are now created once per activity and re-attached; `clearPage` still releases
+every photo and artwork bitmap but leaves the icons inside reused tiles. The header
+is recomputed on the minute tick, on a weather answer and on resume, not on every
+page change. Home skips the TV-input lookup unless a shortcut is pinned.
+
 ## Poster grid, rain and dimming
 
 Library pages show `HomeLayout.LIBRARY_COLUMNS` poster-shaped cards a row and
