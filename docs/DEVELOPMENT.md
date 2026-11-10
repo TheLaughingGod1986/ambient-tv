@@ -170,17 +170,22 @@ first in every refreshed pool, so a favourite stays until its owner removes it.
 
 ## Hero screensaver presentation
 
-The hero caption is the photo's capture month (or "N years ago today") and, with a
-birthday saved, the age then; nothing is drawn when the date is unknown. Automatic
-framing enlarges an upright photo by at most `HeroComposition.UPRIGHT_ZOOM` around
-a detected face, because a larger zoom cut off people the detector had missed. The
-preview strip is `HeroGeometry.upNext`: the next three photos, never the one on
-screen. `PhotoPoolPolicy.isScreenshot` leaves PNG files out of the feed, since phone
-screenshots are PNG and camera photos are not. The panel's header mirrors Home: weather
-at its left edge, clock at its right, on one row above the strip.
+`HeroLayoutPolicy` decides how the hero fills a wide screen. A landscape photo
+fills it alone. An upright photo is composed with the upright photos that follow
+it, two across or three for very tall shots, by `HeroComposite` on the worker
+thread into one 1920x1080 frame; the sources are recycled, so memory matches a
+single full-screen photo. Each panel uses `HomePhotoPolicy.featureFrame`, so a
+detected face is never cut to fill it. The sequence advances by the number shown;
+if a landscape photo had to be skipped to find a partner it advances by one, so
+nothing is dropped. A framing chosen for a photo is respected by showing it alone.
 
-A refreshed pool is stored in `PhotoPoolPolicy.spread` order: sorted by capture time,
-then stepped through about 38% at a time, so burst shots are not shown back to back.
+Each photo's caption is its capture month (or "N years ago today") and, with a
+birthday saved, the age then; nothing is drawn when the date is unknown. The header
+mirrors Home: weather top-left, clock top-right. `PhotoPoolPolicy.isScreenshot`
+leaves PNG files out of the feed, since phone screenshots are PNG and camera photos
+are not. A refreshed pool is stored in `PhotoPoolPolicy.spread` order: sorted by
+capture time, then stepped through about 38% at a time, so burst shots are not
+shown back to back.
 
 ## Poster grid, rain and dimming
 

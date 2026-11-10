@@ -43,7 +43,7 @@ and media accounts are not connected. They are not photographs of a household TV
 - Optional birthday for the chosen person: captions then show the age at the time, such as "3 weeks old". A photo taken on this day in an earlier year leads Home as "2 years ago today".
 - Movies, TV Shows and Anime show 16 poster-shaped tiles a page instead of 10.
 - Weather shows the day's chance of rain.
-- Hero screensaver: the photo's own date and age replace the fixed slogan, upright photos are no longer zoomed far enough to cut people off, the preview strip shows what comes next, the backdrop is calmer, and weather shows the day's range.
+- Hero screensaver fills the screen: a landscape photo on its own, upright photos two or three side by side. Each photo shows its own date and age in place of the fixed slogan, with weather top-left and the clock top-right as on Home.
 - Phone screenshots (PNG files) are left out of the photo feed.
 - Favourites stay on the TV through photo refreshes (up to 16), instead of rotating out with the other memories.
 - Optional evening dimming of Home and the screensaver from 21:00 to 07:00, in Photo connection settings.

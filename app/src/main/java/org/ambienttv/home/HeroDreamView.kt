@@ -18,7 +18,7 @@ interface SaverDisplay {
 }
 /** Reference-inspired single hero. Original photo is composed around its detected face without distortion. */
 internal class HeroDreamView(c:Context,private val previewPanel:WeatherPanel?=null):View(c),SaverDisplay {
- private companion object { const val HEADER_LEFT=980f } // the panel's left edge, shared with the preview strip
+ private companion object { const val HEADER_LEFT=82f } // the same left margin as the photo captions
  private var dimMinute=-1L;private var dimmed=false
  /** Evening dimming is drawn over the finished frame, so every layout gets it the same way. */
  override fun draw(canvas:Canvas){
@@ -35,7 +35,7 @@ internal class HeroDreamView(c:Context,private val previewPanel:WeatherPanel?=nu
  private val clip=Path()
  private val thumbImageRects=Array(3){RectF()}
  private val scrim=Paint().apply {shader=LinearGradient(900f,0f,1920f,0f,intArrayOf(Color.TRANSPARENT,Color.argb(170,2,9,16)),null,Shader.TileMode.CLAMP)}
- private val topScrim=Paint().apply {shader=LinearGradient(0f,0f,0f,330f,intArrayOf(Color.argb(110,2,9,16),Color.TRANSPARENT),null,Shader.TileMode.CLAMP)}
+ private val topScrim=Paint().apply {shader=LinearGradient(0f,0f,0f,330f,intArrayOf(Color.argb(150,2,9,16),Color.TRANSPARENT),null,Shader.TileMode.CLAMP)}
  private val bottomScrim=Paint().apply {shader=LinearGradient(0f,670f,0f,1080f,intArrayOf(Color.TRANSPARENT,Color.argb(120,2,9,16)),null,Shader.TileMode.CLAMP)}
  private var current:Bitmap?=null
  private var previous:Bitmap?=null
@@ -63,10 +63,10 @@ internal class HeroDreamView(c:Context,private val previewPanel:WeatherPanel?=nu
  }
  override fun updateHeader(){val now=System.currentTimeMillis()/60000;if(now!=minute){minute=now;timeText=timeFormat.format(Date());dateText=dateFormat.format(Date());panel=previewPanel ?: WeatherStore.panel(context);invalidate()}}
  override fun show(bitmap:Bitmap){showHero(bitmap,emptyList(),0)}
- private var caption:Pair<String,String?>?=null
+ private var captions=emptyList<HeroCaption>()
  /** [selection] marks one preview as the photo on screen; a negative value means the strip is what comes next. */
- fun showHero(bitmap:Bitmap,previews:List<Bitmap>,selection:Int,face:FaceRegion?=null,background:Bitmap?=null,framing:String="auto",caption:Pair<String,String?>?=null){
-  this.caption=caption
+ fun showHero(bitmap:Bitmap,previews:List<Bitmap>,selection:Int,face:FaceRegion?=null,background:Bitmap?=null,framing:String="auto",captions:List<HeroCaption> = emptyList()){
+  this.captions=captions
   previous?.recycle();oldSoft?.recycle()
   previous=if(motionEnabled)current else null;oldSoft=if(motionEnabled)soft else null;oldEdge=if(motionEnabled)edge else null
   if(!motionEnabled){current?.recycle();soft?.recycle()}
@@ -119,9 +119,10 @@ internal class HeroDreamView(c:Context,private val previewPanel:WeatherPanel?=nu
   }
   drawLayer(previous,oldSoft,previousRect,oldEdge,255)
   drawLayer(current,soft,currentRect,edge,if(previous==null)255 else (fraction*255).toInt())
-  paint.alpha=255;canvas.drawRect(0f,0f,1920f,1080f,scrim);canvas.drawRect(0f,0f,1920f,1080f,bottomScrim)
-  // Header row across the right-hand panel, as on Home: weather at its left edge, clock at its right.
-  canvas.drawRect(880f,0f,1920f,330f,topScrim)
+  // The side scrim only backs the optional preview strip; full-screen photos stay clear.
+  paint.alpha=255;if(thumbs.isNotEmpty())canvas.drawRect(0f,0f,1920f,1080f,scrim);canvas.drawRect(0f,0f,1920f,1080f,bottomScrim)
+  // Header row as on Home: weather in the top-left corner, clock in the top-right.
+  canvas.drawRect(0f,0f,1920f,330f,topScrim)
   paint.setShadowLayer(10f,0f,2f,Color.argb(150,0,0,0))
   paint.typeface=normal;paint.color=Color.WHITE;paint.textAlign=Paint.Align.RIGHT;paint.textSize=112f;canvas.drawText(timeText,1860f,172f,paint)
   paint.textSize=40f;canvas.drawText(dateText,1860f,228f,paint)
@@ -141,11 +142,15 @@ internal class HeroDreamView(c:Context,private val previewPanel:WeatherPanel?=nu
   paint.clearShadowLayer()
   paint.textAlign=Paint.Align.LEFT
   // The photo's own caption: when it was taken and, with a birthday saved, the age then. Nothing when unknown.
-  caption?.let{(whenTaken,age)->
-   paint.typeface=normal;paint.color=Color.WHITE;paint.textSize=54f;canvas.drawText(whenTaken,82f,if(age!=null)902f else 940f,paint)
-   if(age!=null){paint.textSize=30f;paint.color=Color.rgb(222,231,240);canvas.drawText(age,84f,950f,paint)}
-   paint.color=Color.WHITE;paint.strokeWidth=2f;canvas.drawLine(84f,978f,136f,978f,paint)
+  paint.setShadowLayer(10f,0f,2f,Color.argb(150,0,0,0))
+  for(item in captions){
+   val (whenTaken,age)=item.lines ?: continue
+   val x=item.left+82f
+   paint.typeface=normal;paint.color=Color.WHITE;paint.textSize=54f;canvas.drawText(whenTaken,x,if(age!=null)902f else 940f,paint)
+   if(age!=null){paint.textSize=30f;paint.color=Color.rgb(222,231,240);canvas.drawText(age,x+2f,950f,paint)}
+   paint.color=Color.WHITE;paint.strokeWidth=2f;canvas.drawLine(x+2f,978f,x+54f,978f,paint)
   }
+  paint.clearShadowLayer()
   if(selected<0 && thumbs.isNotEmpty()){paint.typeface=normal;paint.textSize=18f;paint.color=Color.rgb(210,222,231);canvas.drawText("U P   N E X T",thumbRects[0].left+2f,646f,paint)}
   for(i in 0 until minOf(3,thumbs.size)){
    val r=thumbRects[i];clip.reset();clip.addRoundRect(r,14f,14f,Path.Direction.CW);canvas.save();canvas.clipPath(clip)
