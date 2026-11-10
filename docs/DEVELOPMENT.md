@@ -176,7 +176,8 @@ framing enlarges an upright photo by at most `HeroComposition.UPRIGHT_ZOOM` arou
 a detected face, because a larger zoom cut off people the detector had missed. The
 preview strip is `HeroGeometry.upNext`: the next three photos, never the one on
 screen. `PhotoPoolPolicy.isScreenshot` leaves PNG files out of the feed, since phone
-screenshots are PNG and camera photos are not.
+screenshots are PNG and camera photos are not. The panel's header mirrors Home: weather
+at its left edge, clock at its right, on one row above the strip.
 
 A refreshed pool is stored in `PhotoPoolPolicy.spread` order: sorted by capture time,
 then stepped through about 38% at a time, so burst shots are not shown back to back.
