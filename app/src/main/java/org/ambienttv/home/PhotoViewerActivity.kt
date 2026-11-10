@@ -57,7 +57,7 @@ class PhotoViewerActivity:Activity() {
   button.setOnClickListener {val key=files[index].name.substringAfter('-');val prefs=getSharedPreferences("favourites",0);val ids=(prefs.getStringSet("ids",emptySet()) ?: emptySet()).toMutableSet();if(!ids.add(key))ids.remove(key);prefs.edit().putStringSet("ids",ids).apply();refreshLabel()}
   showPhoto()
  }
- private fun refreshLabel(){val key=files[index].name.substringAfter('-');button.text=if(key in (getSharedPreferences("favourites",0).getStringSet("ids",emptySet()) ?: emptySet()))"Remove from favourites" else "Add to favourites";val taken=PhotoCaption.fullDate(PhotoCaption.seconds(files[index].name,times));caption.text="${index+1} / ${files.size}"+(if(taken!=null)"  ·  $taken" else "")+"\nLeft / right to browse  ·  Back to photos"}
+ private fun refreshLabel(){val key=files[index].name.substringAfter('-');button.text=if(key in (getSharedPreferences("favourites",0).getStringSet("ids",emptySet()) ?: emptySet()))"Remove from favourites" else "Add to favourites";val taken=PhotoCaption.detail(PhotoCaption.seconds(files[index].name,times),AppPreferences.birthdaySeconds(this));caption.text="${index+1} / ${files.size}"+(if(taken!=null)"  ·  $taken" else "")+"\nLeft / right to browse  ·  Back to photos"}
  private fun showPhoto(){
   refreshLabel();val request=++version;val file=files[index]
   worker.queue.clear()

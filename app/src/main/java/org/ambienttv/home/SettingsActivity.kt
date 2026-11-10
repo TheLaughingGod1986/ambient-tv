@@ -121,6 +121,11 @@ class SettingsActivity : Activity() {
    status.text="Saved. Refreshing photos…"
    Photos.refresh(applicationContext,true) { message -> runOnUiThread { status.text=message;if(::syncDetails.isInitialized)syncDetails.text=PhotoSync.summary(this) } }
   }
+  val birthday=field("Birthday of this person (YYYY-MM-DD)",AppPreferences.birthday(this))
+  label("Optional. Photos are then captioned with the age at the time, such as 3 weeks old. Leave blank to show dates only.",18f)
+  button("Save birthday") {
+   try { AppPreferences.saveBirthday(this,birthday.text.toString());status.text="Birthday saved." } catch(_:IllegalArgumentException) { status.text="Enter the date as YYYY-MM-DD, such as 2024-01-31, or leave it blank." }
+  }
   button("Refresh photos") { getSharedPreferences("home-daily",0).edit().putLong("row-day",Long.MIN_VALUE).apply(); Photos.refresh(applicationContext,true) { message -> runOnUiThread { status.text=message;if(::syncDetails.isInitialized)syncDetails.text=PhotoSync.summary(this) } } }
   button("Disconnect and erase this app’s cached photos") {
    if(!signIn.isEnabled) { status.text="Wait for sign-in to finish."; return@button }
@@ -135,6 +140,8 @@ class SettingsActivity : Activity() {
   button("Disconnect Plex from Ambient TV") { worker.execute { PlexFeed.clear(applicationContext); runOnUiThread {status.text="Plex disconnected from Ambient TV. Other apps are unchanged."} } }
   button("Preview Ambient TV") { startActivity(android.content.Intent(this,HomeActivity::class.java)) }
   label("Optional weather",22f)
+  val dim=CheckBox(this).apply{text="Dim Home and the screensaver in the evening (21:00–07:00)";textSize=20f;setTextColor(Color.WHITE);minHeight=dp(64);isChecked=AppPreferences.dimEvening(this@SettingsActivity);content.addView(this)}
+  dim.setOnCheckedChangeListener{_,checked->AppPreferences.setDimEvening(this,checked);status.text=if(checked)"Evening dimming is on." else "Evening dimming is off."}
   val weatherOn=CheckBox(this).apply{text="Show weather for a place I choose";textSize=20f;setTextColor(Color.WHITE);isChecked=AppPreferences.weatherEnabled(this@SettingsActivity);content.addView(this)}
   val place=field("Weather place label",AppPreferences.saved(this,"weatherLabel"))
   val latitude=field("Latitude",AppPreferences.saved(this,"latitude"))

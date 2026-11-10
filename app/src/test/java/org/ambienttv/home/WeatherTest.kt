@@ -12,6 +12,8 @@ class WeatherTest {
   val data=WeatherData.stored(WeatherData.parse(withRange,now).json())
   assertEquals("High 15°  ·  Low 8°",WeatherPanel.from(data,now).range)
   assertNull(WeatherPanel.from(WeatherData.stored(WeatherData.parse(response(),now).json()),now).range)
+  val withRain=response().dropLast(1)+""","daily":{"temperature_2m_max":[15.4],"temperature_2m_min":[7.6],"precipitation_probability_max":[42]}}"""
+  assertEquals("High 15°  ·  Low 8°  ·  Rain 42%",WeatherPanel.from(WeatherData.stored(WeatherData.parse(withRain,now).json()),now).range)
   val upsideDown=response().dropLast(1)+""","daily":{"temperature_2m_max":[2.0],"temperature_2m_min":[9.0]}}"""
   assertNull(WeatherPanel.from(WeatherData.parse(upsideDown,now),now).range)
  }

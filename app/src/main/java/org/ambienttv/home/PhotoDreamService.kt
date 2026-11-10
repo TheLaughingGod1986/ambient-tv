@@ -143,6 +143,13 @@ class PhotoDreamService:DreamService() {
 }
 
 internal class DreamView(c:Context,private val previewPanel:WeatherPanel?=null):View(c),SaverDisplay {
+ private var dimMinute=-1L;private var dimmed=false
+ /** Evening dimming is drawn over the finished frame, so every layout gets it the same way. */
+ override fun draw(canvas:Canvas){
+  super.draw(canvas)
+  val now=System.currentTimeMillis();if(now/60000!=dimMinute){dimMinute=now/60000;dimmed=DimPolicy.active(now,AppPreferences.dimEvening(context))}
+  if(dimmed)canvas.drawColor(Color.argb(DimPolicy.ALPHA,0,0,0))
+ }
  private var current:Bitmap?=null
  private var previous:Bitmap?=null
  private var fadeAt=0L

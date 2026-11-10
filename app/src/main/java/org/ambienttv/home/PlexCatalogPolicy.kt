@@ -4,7 +4,7 @@ import org.json.JSONObject
 data class PlexPoster(val server:String,val key:String,val title:String,val thumb:String,val addedAt:Long,val animeEvidence:Boolean=false)
 data class PlexCatalogPage(val items:List<PlexPoster>,val hasMore:Boolean,val sections:List<String>)
 object PlexCatalogPolicy {
- const val PAGE_SIZE=10
+ const val PAGE_SIZE=16
  fun page(items:List<PlexPoster>,index:Int):List<PlexPoster> {
   require(index in 0..9)
   return items.distinctBy{it.server+":"+it.key}

@@ -55,7 +55,9 @@ object Photos {
     // Keep today's visible memories in the authorised cache through background refreshes.
     val daily=c.getSharedPreferences("home-daily",0)
     val pinned=if(daily.getLong("row-day",Long.MIN_VALUE)==HomePhotoPolicy.localDay(now,java.util.TimeZone.getTimeZone("Europe/London")))daily.getString("row-ids","").orEmpty().split(',').mapNotNull{it.substringBefore('.').toIntOrNull()}.filter{id->catalog.any{it.getInt("id")==id}}else emptyList()
-    val selectedIds=(pinned+mixedIds).distinct().take(PhotoPoolPolicy.LIMIT)
+    // Up to four photos taken on this day in earlier years join the pool so Home can lead with one.
+    val anniversaries=catalog.filter{PhotoCaption.yearsAgoToday(it.getLong("time"),now)!=null}.take(4).map{it.getInt("id")}
+    val selectedIds=(pinned+anniversaries+mixedIds).distinct().take(PhotoPoolPolicy.LIMIT)
     val byId=catalog.associateBy{it.getInt("id")}
     val items=selectedIds.map{byId.getValue(it)}
     val nextArchiveOffset=if(older.isEmpty())0 else (archiveOffset+PhotoMixPolicy.MEMORIES)%older.size

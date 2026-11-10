@@ -154,6 +154,25 @@ latency or establish NAS availability. On API errors 102/104, Synology requests
 advertised API routing/version information and retries only a validated webapi
 CGI path. Person-membership validation and cached fallback remain required.
 
+## Paired photos, ages and anniversaries
+
+When the day's featured photo is upright, `HomeExtras` pairs it with another
+upright photo from the pool and the wide tile shows both halves
+(`HomeLayout.PAIR_W`). The pairing is stable for a day and never reuses a photo
+already on Home. With an optional birthday saved, `PhotoCaption` adds the age at
+capture to the Home and viewer captions; without one, captions show dates only.
+A cached photo taken on today's date in an earlier year leads the Home row, and
+`Photos.refresh` adds up to four such photos to the pool. All of this uses the
+capture time reported by the NAS; nothing is inferred from the picture.
+
+## Poster grid, rain and dimming
+
+Library pages show `HomeLayout.LIBRARY_COLUMNS` poster-shaped cards a row and
+`PlexCatalogPolicy.PAGE_SIZE` titles a page; the two must stay in step. Weather
+adds the day's chance of rain when the service returns it. `DimPolicy` draws an
+optional dark overlay over Home and both screensaver layouts between 21:00 and
+07:00 by the TV's clock; it is off until enabled in Photo connection settings.
+
 ## Input shortcuts on Home
 
 `HomeShortcuts` lets the owner pin up to two of the TV's own passthrough inputs

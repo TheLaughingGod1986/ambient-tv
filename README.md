@@ -39,6 +39,11 @@ and media accounts are not connected. They are not photographs of a household TV
 
 - Pin up to two TV inputs, such as a games console, beside the app shortcuts on Home. Choose the input and a name in Settings → TV & inputs; each press steps to the next choice, so nothing is typed. Selecting the tile switches the TV to that input.
 - Photo thumbnails on the Photos page fill more of their tiles.
+- When the featured photo is upright, the wide Home tile shows two upright photos side by side.
+- Optional birthday for the chosen person: captions then show the age at the time, such as "3 weeks old". A photo taken on this day in an earlier year leads Home as "2 years ago today".
+- Movies, TV Shows and Anime show 16 poster-shaped tiles a page instead of 10.
+- Weather shows the day's chance of rain.
+- Optional evening dimming of Home and the screensaver from 21:00 to 07:00, in Photo connection settings.
 
 ## New in 0.2.4
 
