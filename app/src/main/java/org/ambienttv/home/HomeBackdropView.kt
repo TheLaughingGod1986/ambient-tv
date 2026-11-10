@@ -9,8 +9,21 @@ internal class HomeBackdropView(c:Context,private val sunrise:Boolean=false):Vie
   // Cache the static multi-pass scenery on the GPU; focus changes only composite it.
   setLayerType(View.LAYER_TYPE_HARDWARE,null)
   // Decode the static wallpaper without blocking the first focusable frame.
-  Thread({val decoded=BitmapFactory.decodeResource(resources,if(sunrise)R.drawable.home_sunrise else R.drawable.home_mountains);post{mountains=decoded;invalidate()}},"tv-wallpaper").apply{isDaemon=true;start()}
+  Thread({
+   val decoded=BitmapFactory.decodeResource(resources,if(sunrise)R.drawable.home_sunrise else R.drawable.home_mountains)
+   val strip=if(sunrise && decoded!=null)headerStrip(decoded)else null
+   post{mountains=strip ?: decoded;cropped=strip!=null;invalidate()}
+  },"tv-wallpaper").apply{isDaemon=true;start()}
  }
+ private var cropped=false
+ private val headerArea=RectF(104f,0f,1920f,360f)
+ /** Keep only the rows the header shows, at the size they are drawn, instead of the whole panorama. */
+ private fun headerStrip(source:Bitmap):Bitmap? = try {
+  val cropH=(source.width*360f/1816f).toInt().coerceAtMost(source.height);val top=(source.height-cropH)/2
+  val unit=minOf(resources.displayMetrics.widthPixels/1920f,resources.displayMetrics.heightPixels/1080f)
+  val w=(1816*unit).toInt().coerceIn(1,source.width);val h=(360*unit).toInt().coerceIn(1,cropH)
+  Bitmap.createBitmap(source,0,top,source.width,cropH,Matrix().apply{setScale(w.toFloat()/source.width,h.toFloat()/cropH)},true).also{if(it!==source)source.recycle()}
+ }catch(_:Exception){null}
  private val p=Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
  private val base=LinearGradient(0f,0f,1700f,1080f,intArrayOf(Color.rgb(3,16,36),Color.rgb(10,39,78),Color.rgb(5,23,48)),null,Shader.TileMode.CLAMP)
  private val readableHeader=LinearGradient(0f,0f,0f,480f,intArrayOf(Color.argb(if(sunrise)18 else 145,2,12,25),Color.argb(40,2,12,25)),null,Shader.TileMode.CLAMP)
@@ -24,7 +37,8 @@ internal class HomeBackdropView(c:Context,private val sunrise:Boolean=false):Vie
   p.shader=base;c.drawRect(0f,0f,1920f,1080f,p);p.shader=null
   val mountains=this.mountains
   if(mountains!=null){
-  if(sunrise){
+  if(cropped)c.drawBitmap(mountains,null,headerArea,p)
+  else if(sunrise){
    // Crop the panorama to the header without stretching; keep the sun above the cards.
    val cropH=(mountains.width*360f/1816f).toInt().coerceAtMost(mountains.height)
    val top=(mountains.height-cropH)/2

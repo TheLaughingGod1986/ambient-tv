@@ -7,7 +7,11 @@ import android.content.BroadcastReceiver
 import android.content.IntentFilter
 import android.content.Context
 import android.graphics.*
+import android.content.res.ColorStateList
+import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.StateListDrawable
 import android.net.Uri
 import android.os.*
 import android.provider.Settings
@@ -21,7 +25,7 @@ import java.util.concurrent.Executors
 
 /** Ambient TV launcher, with independent photo and resume-feed refresh. */
 class HomeActivity:Activity() {
- companion object {internal var previewFiles:List<File>?=null;internal var previewWeather:WeatherPanel?=null;internal var previewResolution:Pair<Int,Int>?=null;internal var previewWatch:List<WatchItem>?=null}
+ companion object {internal var previewFiles:List<File>?=null;internal var previewWeather:WeatherPanel?=null;internal var previewResolution:Pair<Int,Int>?=null;internal var previewWatch:List<WatchItem>?=null;internal var previewCatalog:((String,Int)->PlexCatalogPage)?=null}
  private fun photoFiles()=previewFiles ?: Photos.currentFiles(this)
  internal fun pageForTest()=page
  internal fun focusForTest(key:String){check(focusViews[key]?.requestFocus()==true)}
@@ -35,7 +39,7 @@ class HomeActivity:Activity() {
    if(v is TextView && v.text.toString().startsWith("Loading your Plex"))return true
    return v is ViewGroup && (0 until v.childCount).any{loading(v.getChildAt(it))}
   }
-  return !loading(root)
+  return !loading(root) && (page!="Apps" || appGrid!=null)
  }
 
  internal fun readyForTest()=photoSlots.size==4 && focusViews.containsKey("footer:2")
@@ -51,6 +55,8 @@ class HomeActivity:Activity() {
  // Keep slow video artwork independent of family-photo decoding and Plex discovery.
  private val artworkWorker=java.util.concurrent.ThreadPoolExecutor(2,2,0L,java.util.concurrent.TimeUnit.MILLISECONDS,java.util.concurrent.LinkedBlockingQueue<Runnable>())
  private val nativeWorker=java.util.concurrent.ThreadPoolExecutor(1,1,0L,java.util.concurrent.TimeUnit.MILLISECONDS,java.util.concurrent.LinkedBlockingQueue<Runnable>())
+ // The app listing has its own thread, so it never waits behind photo decoding or a slow Plex server.
+ private val appsWorker=java.util.concurrent.ThreadPoolExecutor(1,1,0L,java.util.concurrent.TimeUnit.MILLISECONDS,java.util.concurrent.LinkedBlockingQueue<Runnable>())
  private val feedWorker=Executors.newSingleThreadExecutor()
  private val feedState=FeedRefreshState()
  private var feedActive=false
@@ -63,18 +69,22 @@ class HomeActivity:Activity() {
 
  private val photoSlots=mutableListOf<PhotoSlot>()
  private lateinit var mediaHost:FrameLayout
- private val mediaBitmaps=mutableListOf<Bitmap>()
+ private var mediaArtShown=0
  private var mediaEpoch=0
- private var mediaSignature=""
+ private val nothingDrawn="\u0000"
+ private var mediaSignature=nothingDrawn
  private var currentWatchItems=emptyList<WatchItem>()
  private var availableWatchItems=emptyList<WatchItem>()
  private data class PhotoSlot(val image:OrientationPhotoView,val detail:TextView,val placeholder:ImageView)
  @Volatile private var epoch=0
- private val bitmaps=mutableListOf<Bitmap>()
  private var scale=1f
  private var nextId=1000
  private val titleColor=Color.rgb(240,247,252)
- private val tick=object:Runnable { override fun run() { if(!isFinishing) { updateHeader();if(page=="Home")updateHomePhotos();refreshPhotos();handler.postDelayed(this,60000-System.currentTimeMillis()%60000) } } }
+ private val tick=object:Runnable { override fun run() { if(!isFinishing) { updateHeader();if(page=="Home")updateHomePhotos();refreshPhotos();refreshWeather();handler.postDelayed(this,60000-System.currentTimeMillis()%60000) } } }
+ /** The store rate-limits itself; a new reading is drawn as soon as it arrives instead of at the next minute. */
+ private fun refreshWeather() {
+  if(previewFiles==null)WeatherStore.refresh(applicationContext){handler.post{if(!isFinishing && !isDestroyed)updateHeader()}}
+ }
  private fun refreshPhotos() {
   if(previewFiles!=null)return
   val before=getSharedPreferences("state",0).getString("generation","")
@@ -88,29 +98,30 @@ class HomeActivity:Activity() {
  }
  private lateinit var backdrop:HomeBackdropView
  private lateinit var sidebarPanel:View
+ private var sidebarScrim:View?=null
+ private val navViews=mutableListOf<TextView>()
  private var compactLayout=false
  private var sidebarExpanded:Boolean?=null
- private var sidebarAnimation:android.animation.ValueAnimator?=null
  private val sidebarNames=listOf("Home","TV Shows","Movies","Anime","Apps","Photos","Search","Settings")
  private val sidebarUpdate=Runnable{updateSidebar()}
+ /** Labels and widths change in one layout pass; after that only the scrim's alpha animates. */
  private fun updateSidebar(){
   if(!::sidebarPanel.isInitialized)return
-  val expanded=!compactLayout || focusViews.filterKeys{it.startsWith("nav:")}.values.any{it.hasFocus()}
+  val expanded=!compactLayout || navViews.any{it.hasFocus()}
   if(sidebarExpanded==expanded)return
-  val first=sidebarExpanded==null;sidebarExpanded=expanded;sidebarAnimation?.cancel()
-  val fullWidth=220;val navWidth=if(compactLayout)196 else 180
-  val start=sidebarPanel.layoutParams.width;val end=p(if(expanded)fullWidth else 96)
-  sidebarNames.forEachIndexed{i,label->(focusViews["nav:$i"] as? TextView)?.let{v->
-   v.text=if(expanded)label else "";v.compoundDrawablePadding=if(expanded)p(14)else 0
-   v.setPadding(p(17),p(8),p(12),p(8));v.bringToFront()
-  }}
-  fun frame(width:Int){val lp=sidebarPanel.layoutParams;lp.width=width;sidebarPanel.layoutParams=lp
-   val amount=((width-p(96)).toFloat()/p(fullWidth-96).coerceAtLeast(1)).coerceIn(0f,1f)
-   sidebarPanel.setBackgroundColor(Color.argb((255-35*amount).toInt(),3,13,25))
-   sidebarNames.indices.forEach{i->focusViews["nav:$i"]?.let{v->val n=v.layoutParams;n.width=(p(64)+(p(navWidth)-p(64))*amount).toInt();v.layoutParams=n}}
+  val first=sidebarExpanded==null;sidebarExpanded=expanded
+  val width=p(if(!expanded)64 else if(compactLayout)196 else 180)
+  navViews.forEachIndexed{i,v->
+   v.text=if(expanded)sidebarNames[i] else "";v.compoundDrawablePadding=if(expanded)p(14)else 0
+   if(v.layoutParams.width!=width){v.layoutParams.width=width;v.requestLayout()}
   }
-  val motion=Settings.Global.getFloat(contentResolver,Settings.Global.ANIMATOR_DURATION_SCALE,1f)>0f
-  if(first || !motion)frame(end) else sidebarAnimation=android.animation.ValueAnimator.ofInt(start,end).apply{duration=180;addUpdateListener{frame(it.animatedValue as Int)};start()}
+  sidebarScrim?.let{scrim->
+   scrim.animate().cancel()
+   // Labels appear at once, so the scrim starts mostly opaque and only finishes its fade.
+   // ViewPropertyAnimator follows Android's animation scale, including "animations off".
+   if(first)scrim.alpha=if(expanded)1f else 0f
+   else{if(expanded)scrim.alpha=maxOf(scrim.alpha,.75f);scrim.animate().alpha(if(expanded)1f else 0f).setDuration(120L)}
+  }
  }
  private fun contentPx(value:Int)=p(HomeLayout.contentWidth(value,compactLayout))
  private lateinit var header:HomeWeatherView
@@ -126,8 +137,9 @@ class HomeActivity:Activity() {
   window.decorView.systemUiVisibility=View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
   val size=previewResolution ?: (resources.displayMetrics.widthPixels to resources.displayMetrics.heightPixels)
   scale=HomeLayout.scale(size.first,size.second)
-  root=FrameLayout(this).apply { background=GradientDrawable(GradientDrawable.Orientation.TL_BR,intArrayOf(Color.rgb(4,14,24),Color.rgb(10,30,44),Color.rgb(5,15,24))) }
-  setContentView(root);root.viewTreeObserver.addOnGlobalFocusChangeListener{_,_->handler.removeCallbacks(sidebarUpdate);handler.post(sidebarUpdate)};showPage("Home")
+  // The backdrop paints every pixel, so a window or root background would only be drawn over.
+  root=FrameLayout(this)
+  setContentView(root);window.setBackgroundDrawable(null);root.viewTreeObserver.addOnGlobalFocusChangeListener{_,_->handler.removeCallbacks(sidebarUpdate);handler.post(sidebarUpdate)};showPage("Home")
   registerHomePress()
   if(previewFiles==null && Build.VERSION.SDK_INT>=23 && checkSelfPermission("android.permission.READ_TV_LISTINGS")!=android.content.pm.PackageManager.PERMISSION_GRANTED)requestPermissions(arrayOf("android.permission.READ_TV_LISTINGS"),42)
  }
@@ -139,42 +151,62 @@ class HomeActivity:Activity() {
  }
  override fun onRequestPermissionsResult(code:Int,permissions:Array<out String>,results:IntArray){super.onRequestPermissionsResult(code,permissions,results);if(code==42 && page=="Home")showPage("Home")}
  override fun onNewIntent(intent:Intent) {super.onNewIntent(intent);setIntent(intent);if(intent.hasCategory(Intent.CATEGORY_HOME)){if(page!="Home")showPage("Home");refreshFeedOnReturn()}}
- override fun onResume() { super.onResume();if(compactLayout!=getSharedPreferences("home-ui",0).getBoolean("compactSidebar",false))showPage(page);handler.post(sidebarUpdate);feedActive=true;if(resumedOnce && page=="Home"){if(mediaBitmaps.size<displayedWatchItems.size)mediaSignature="";updateHomePhotos()};resumedOnce=true
+ override fun onResume() { super.onResume();if(compactLayout!=getSharedPreferences("home-ui",0).getBoolean("compactSidebar",false))showPage(page);handler.post(sidebarUpdate);feedActive=true
+  // The viewer can remove a favourite; show the Favourites grid as it is now.
+  if(resumedOnce && page=="Photos" && galleryFavourites && favourites().map{it.name}!=galleryNames)showPage("Photos")
+  if(resumedOnce && page=="Home"){if(mediaArtShown<displayedWatchItems.size)mediaSignature=nothingDrawn;updateHomePhotos()};resumedOnce=true
   if(previewFiles==null && !observingFeed && Build.VERSION.SDK_INT>=26)try{contentResolver.registerContentObserver(android.media.tv.TvContract.WatchNextPrograms.CONTENT_URI,true,feedObserver);observingFeed=true}catch(_:Exception){}
   refreshFeedOnReturn();handler.removeCallbacks(feedPoll);handler.postDelayed(feedPoll,60000)
-  handler.removeCallbacks(tick);handler.post(tick);if(previewFiles==null)WeatherStore.refresh(applicationContext)
+  handler.removeCallbacks(tick);handler.post(tick)
  }
- override fun onPause() {rememberFocus();feedActive=false;feedState.pause();handler.removeCallbacks(feedRead);handler.removeCallbacks(nativeRead);nativeWorker.queue.clear();handler.removeCallbacks(feedPoll);handler.removeCallbacks(feedReturnRetry);handler.removeCallbacks(feedReturnFinalRetry)
+ override fun onPause() {rememberFocus();feedActive=false;feedSeen=false;feedState.pause();handler.removeCallbacks(feedRead);handler.removeCallbacks(nativeRead);nativeWorker.queue.clear();handler.removeCallbacks(feedPoll);handler.removeCallbacks(feedReturnRetry);handler.removeCallbacks(feedReturnFinalRetry)
   if(observingFeed){contentResolver.unregisterContentObserver(feedObserver);observingFeed=false};handler.removeCallbacks(tick);super.onPause() }
  override fun onTrimMemory(level:Int) {
   super.onTrimMemory(level)
-  if(level>=android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW)run{PlexFeed.trimArtwork();WatchNextReader.trimArtwork()}
+  // Leaving Home drops what can be rebuilt from local data: decoded pictures, and app icons (so
+  // an app updated meanwhile shows its new icon). Downloaded artwork is released only under real
+  // memory pressure, so the row need not be fetched again on return.
+  if(level==android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN){PhotoThumbs.clear();ArtThumbs.clear();AppIcons.clear()}
+  else if(level>=android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW)trimCaches()
  }
- override fun onLowMemory(){super.onLowMemory();run{PlexFeed.trimArtwork();WatchNextReader.trimArtwork()}}
- override fun onDestroy() { unregisterReceiver(homePress);epoch++;handler.removeCallbacksAndMessages(null);worker.shutdownNow();artworkWorker.shutdownNow();nativeWorker.shutdownNow();catalogWorker.shutdownNow();feedWorker.shutdownNow();if(::root.isInitialized)clearPage();super.onDestroy() }
+ override fun onLowMemory(){super.onLowMemory();trimCaches()}
+ private fun trimCaches(){PlexFeed.trimArtwork();WatchNextReader.trimArtwork();PhotoThumbs.clear();ArtThumbs.clear();AppIcons.clear()}
+ override fun onDestroy() { unregisterReceiver(homePress);epoch++;handler.removeCallbacksAndMessages(null);worker.shutdownNow();artworkWorker.shutdownNow();nativeWorker.shutdownNow();catalogWorker.shutdownNow();appsWorker.shutdownNow();feedWorker.shutdownNow();if(::root.isInitialized)clearPage();PhotoThumbs.clear();ArtThumbs.clear();super.onDestroy() }
  private fun clearPage() {
-  sidebarAnimation?.cancel();sidebarExpanded=null;epoch++;mediaEpoch++;worker.queue.clear();artworkWorker.queue.clear();nativeWorker.queue.clear();catalogWorker.queue.clear();focusViews.clear();photoSlots.clear();mediaSignature=""
-  mediaBitmaps.forEach{if(!it.isRecycled)it.recycle()};mediaBitmaps.clear()
+  sidebarScrim?.animate()?.cancel();sidebarScrim=null;navViews.clear();sidebarExpanded=null;epoch++;mediaEpoch++;worker.queue.clear();artworkWorker.queue.clear();nativeWorker.queue.clear();catalogWorker.queue.clear();appsWorker.queue.clear();focusViews.clear();photoSlots.clear();mediaSignature=nothingDrawn
+  mediaArtShown=0
   fun detach(view:View){if(view is OrientationPhotoView)view.clear();if(view is ImageView)view.setImageDrawable(null);if(view is android.view.ViewGroup)for(i in 0 until view.childCount)detach(view.getChildAt(i))}
-  detach(root);root.removeAllViews();bitmaps.forEach {if(!it.isRecycled)it.recycle()};bitmaps.clear()
+  detach(root)
+  // The backdrop stays attached, so its rendered layer survives page changes.
+  if(::backdrop.isInitialized && root.childCount>0 && root.getChildAt(0)===backdrop)root.removeViews(1,root.childCount-1)else root.removeAllViews()
  }
  private fun p(v:Int)=(v*scale).toInt()
  private fun place(view:View,x:Int,y:Int,w:Int,h:Int) { val content=x>=244;root.addView(view,FrameLayout.LayoutParams(if(content)contentPx(w)else p(w),p(h)).apply { leftMargin=p(if(content)HomeLayout.contentX(x,compactLayout)else x);topMargin=p(y) }) }
  private fun text(value:String,size:Int=30):TextView=TextView(this).apply { text=value;setTextSize(TypedValue.COMPLEX_UNIT_PX,size*scale);setTextColor(titleColor);gravity=Gravity.CENTER_VERTICAL }
- private fun tile(label:String,action:()->Unit):TextView=text(label,26).apply {
-  id=nextId++;isFocusable=true;isFocusableInTouchMode=true;isClickable=true;setPadding(p(20),p(10),p(16),p(10));contentDescription=label
-  background=rounded(Color.rgb(17,36,51),false)
-  setOnFocusChangeListener { _,focused -> background=rounded(if(focused)Color.rgb(228,239,248) else Color.rgb(17,36,51),focused);setTextColor(if(focused)Color.rgb(9,22,36) else titleColor);compoundDrawables.forEach{if(it is HomeNavIcon || it is ActionChevron)it.setTint(if(focused)Color.rgb(9,22,36)else titleColor)} }
+ private val focusedState=intArrayOf(android.R.attr.state_focused)
+ private val focusedText=Color.rgb(9,22,36)
+ /** Built once per control. Android switches the state itself, so moving focus allocates nothing and needs no layout pass. */
+ private fun states(focused:Drawable,resting:Drawable)=StateListDrawable().apply{addState(focusedState,focused);addState(intArrayOf(),resting)}
+ private fun ring()=states(rounded(Color.TRANSPARENT,true),rounded(Color.TRANSPARENT,false))
+ private fun focusText(resting:Int)=ColorStateList(arrayOf(focusedState,intArrayOf()),intArrayOf(focusedText,resting))
+ /** [selected] marks the active choice in a group (for example a filter) while it is not focused. */
+ private fun tile(label:String,selected:Boolean=false,action:()->Unit):TextView=text(label,26).apply {
+  id=nextId++;isFocusable=true;isFocusableInTouchMode=true;isClickable=true;setPadding(p(20),p(10),p(16),p(10));contentDescription=if(selected)"$label, selected" else label
+  background=states(rounded(Color.rgb(228,239,248),true),if(selected)rounded(Color.rgb(34,70,104),false,Color.rgb(150,190,226))else rounded(Color.rgb(17,36,51),false))
+  setTextColor(focusText(titleColor))
+  // Icons drawn by this app follow the text colour; installed apps keep their own icon colours.
+  setOnFocusChangeListener { _,focused -> compoundDrawables.forEach{if(it is HomeNavIcon || it is ActionChevron)it.setTint(if(focused)focusedText else titleColor)} }
   setOnClickListener { action() }
  }
- private fun rounded(color:Int,focus:Boolean)=GradientDrawable().apply { setColor(color);cornerRadius=14*scale;setStroke(p(if(focus)3 else 1),if(focus)Color.WHITE else Color.rgb(43,66,82)) }
+ // One focus language on every screen: a white ring, plus a pale fill on text tiles.
+ private fun rounded(color:Int,focus:Boolean,rest:Int=Color.rgb(43,66,82))=GradientDrawable().apply { setColor(color);cornerRadius=14*scale;setStroke(maxOf(1,p(if(focus)4 else 1)),if(focus)Color.WHITE else rest) }
  private fun photoOutline(focused:Boolean)=GradientDrawable().apply{
   setColor(Color.TRANSPARENT);cornerRadius=14*scale
-  setStroke(maxOf(1,p(if(focused)3 else 1)),if(focused)Color.rgb(255,226,173)else Color.argb(150,126,168,211))
+  setStroke(maxOf(1,p(if(focused)4 else 1)),if(focused)Color.WHITE else Color.argb(150,126,168,211))
  }
  private fun dockBackground(focused:Boolean)=GradientDrawable(GradientDrawable.Orientation.TL_BR,
   if(focused)intArrayOf(Color.rgb(235,244,253),Color.rgb(208,226,246))else intArrayOf(Color.rgb(25,61,105),Color.rgb(13,39,72))).apply{
-  cornerRadius=14*scale;setStroke(maxOf(1,p(if(focused)3 else 1)),if(focused)Color.WHITE else Color.rgb(82,121,171))
+  cornerRadius=14*scale;setStroke(maxOf(1,p(if(focused)4 else 1)),if(focused)Color.WHITE else Color.rgb(82,121,171))
  }
  private val pageFocus=mutableMapOf<String,String>()
  private fun rememberFocus(){focusViews.entries.firstOrNull{it.value.hasFocus() && !it.key.startsWith("nav:")}?.let{pageFocus[page]=it.key}}
@@ -184,21 +216,21 @@ class HomeActivity:Activity() {
   if(name!=page && name in listOf("Movies","TV Shows","Anime")){catalogPageIndex=0;catalogFocusAfterLoad=null}
   compactLayout=getSharedPreferences("home-ui",0).getBoolean("compactSidebar",false);page=name;clearPage()
   if(!::backdrop.isInitialized)backdrop=HomeBackdropView(this,true)
-  place(backdrop,0,0,1920,1080)
+  if(backdrop.parent==null)root.addView(backdrop,0,FrameLayout.LayoutParams(-1,-1))
   header=HomeWeatherView(this);place(header,244,38,600,110)
-  clock=text("",38).apply { gravity=Gravity.RIGHT or Gravity.CENTER_VERTICAL };place(clock,1430,40,430,118);updateHeader()
+  clock=text("",38).apply { gravity=Gravity.RIGHT or Gravity.CENTER_VERTICAL };place(clock,1458,40,430,118);updateHeader()
   val names=sidebarNames
   var first:View?=null
   names.forEachIndexed { index,label ->
-   val nav=tile(label) { when(label) { else->showPage(label) } }
-   val icon=HomeNavIcon(when(label){"TV Shows"->"TV";"Anime"->"Movies";else->label});icon.setBounds(0,0,p(30),p(30));icon.setTint(titleColor)
-   nav.setTextSize(TypedValue.COMPLEX_UNIT_PX,22*scale);nav.setPadding(p(16),p(8),p(12),p(8));nav.compoundDrawablePadding=p(14);nav.setCompoundDrawables(icon,null,null,null)
-   nav.background=if(label==name)rounded(Color.rgb(228,239,248),false)else android.graphics.drawable.ColorDrawable(Color.TRANSPARENT);nav.setTextColor(if(label==name)Color.rgb(9,22,36)else titleColor);icon.setTint(if(label==name)Color.rgb(9,22,36)else titleColor)
-   nav.setOnFocusChangeListener {_,focused->val active=focused || label==name;nav.background=if(active)rounded(Color.rgb(228,239,248),focused)else android.graphics.drawable.ColorDrawable(Color.TRANSPARENT);nav.setTextColor(if(active)Color.rgb(9,22,36)else titleColor);icon.setTint(if(active)Color.rgb(9,22,36)else titleColor)}
-   focusViews["nav:$index"]=nav
+   val nav=tile(label){if(label=="Photos")galleryPage(false)else showPage(label)}
+   val icon=HomeNavIcon(if(label=="TV Shows")"TV" else label);icon.setBounds(0,0,p(30),p(30));icon.setTint(titleColor)
+   nav.setTextSize(TypedValue.COMPLEX_UNIT_PX,22*scale);nav.setPadding(p(17),p(8),p(12),p(8));nav.compoundDrawablePadding=p(14);nav.setCompoundDrawables(icon,null,null,null)
+   // The current page is marked quietly, so a pale fill always means "this has focus".
+   nav.background=states(rounded(Color.rgb(228,239,248),true),if(label==name)rounded(Color.argb(52,228,239,248),false,Color.argb(84,228,239,248))else ColorDrawable(Color.TRANSPARENT))
+   focusViews["nav:$index"]=nav;navViews.add(nav)
    place(nav,24,182+index*84,180,66);if(label==name)first=nav
   }
-  focusViews.filterKeys{it.startsWith("nav:")}.values.toList().let{nav->nav.forEachIndexed{i,v->v.nextFocusUpId=nav[maxOf(0,i-1)].id;v.nextFocusDownId=nav[minOf(nav.lastIndex,i+1)].id;v.nextFocusLeftId=v.id}}
+  navViews.forEachIndexed{i,v->v.nextFocusUpId=navViews[maxOf(0,i-1)].id;v.nextFocusDownId=navViews[minOf(navViews.lastIndex,i+1)].id;v.nextFocusLeftId=v.id}
   when(name) {
    "Home"->home()
    "Continue Watching"->{heading("Continue Watching");if(currentWatchItems.isEmpty())place(text("No continue watching items are available. Open Plex or YouTube from Home.",28),244,280,1500,100)else watchGrid()}
@@ -221,17 +253,21 @@ class HomeActivity:Activity() {
    "Search"->searchPage()
    "Settings"->settingsPage()
   }
-  sidebarPanel=View(this).apply{elevation=p(8).toFloat();isClickable=true;setBackgroundColor(Color.rgb(3,13,25));importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO};place(sidebarPanel,0,0,96,1080)
-  focusViews.filterKeys{it.startsWith("nav:")}.values.forEach{it.elevation=p(9).toFloat();it.bringToFront()}
+  // Elevation keeps the rail above the raised cards; without an outline it casts no shadow.
+  sidebarPanel=View(this).apply{elevation=p(8).toFloat();outlineProvider=null;isClickable=true;setBackgroundColor(if(compactLayout)Color.rgb(3,13,25)else Color.argb(220,3,13,25));importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO}
+  place(sidebarPanel,0,0,if(compactLayout)96 else 220,1080)
+  if(compactLayout)sidebarScrim=SidebarScrim(this).apply{elevation=p(8).toFloat();outlineProvider=null;alpha=0f;importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO}.also{place(it,0,0,640,1080)}
+  navViews.forEach{it.elevation=p(9).toFloat();it.outlineProvider=null;it.bringToFront()}
   (first ?: focusViews[if(name=="TV")"nav:7"else"nav:0"])?.requestFocus();restoreFocus();updateSidebar()
  }
  private fun heading(value:String) { place(text(value,46).apply{typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)},244,174,1500,65) }
+ private val quietColor=Color.rgb(204,216,228)
+ private fun subheading(value:String,width:Int=1500) { place(text(value,24).apply{setTextColor(quietColor)},244,236,width,48) }
  private fun updateHeader() {
   if(!::header.isInitialized) return
   header.update(previewWeather ?: WeatherStore.panel(this))
   clock.text=run {
-   val time=SimpleDateFormat("HH:mm",Locale.getDefault()).apply{timeZone=TimeZone.getTimeZone("Europe/London")}.format(Date())
-   val date=SimpleDateFormat("EEE, d MMM",Locale.getDefault()).apply{timeZone=TimeZone.getTimeZone("Europe/London")}.format(Date())
+   val now=Date();val time=SimpleDateFormat("HH:mm",Locale.getDefault()).format(now);val date=SimpleDateFormat("EEE, d MMM",Locale.getDefault()).format(now)
    android.text.SpannableString("$time\n$date").apply {
     setSpan(android.text.style.RelativeSizeSpan(1.22f),0,time.length,0)
     setSpan(android.text.style.StyleSpan(Typeface.BOLD),0,time.length,0)
@@ -243,23 +279,22 @@ class HomeActivity:Activity() {
   val view=text(value,if(key=="heading:0")42 else 32).apply {
    typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL);id=nextId++;isFocusable=true;isFocusableInTouchMode=true;isClickable=true
    contentDescription=if(key=="heading:0")"Browse your photos" else "Browse Continue Watching"
-   setOnClickListener{action()};setOnFocusChangeListener{_,focused->background=if(focused)rounded(Color.TRANSPARENT,true)else null}
+   setOnClickListener{action()};background=states(rounded(Color.TRANSPARENT,true),ColorDrawable(Color.TRANSPARENT))
   }
   focusViews[key]=view;place(view,244,y,if(key=="heading:0")550 else 650,52);return view
  }
  private fun home() {
-  headingAction("Your Photos",148,"heading:0"){showPage("Photos")}
+  headingAction("Your Photos",148,"heading:0"){galleryPage(false)}
   place(text("Family memories, all in one place",22).apply{setTextColor(Color.rgb(218,228,239))},244,204,900,28)
   val titles=listOf("Featured memory","Browse photos","Favourites","All Photos")
   val icons=listOf("Recent","Photos","Favourites","All Photos")
   val actions=listOf<()->Unit>(
    {photoFiles().firstOrNull()?.let{openPhoto(it)} ?: safeStart(Intent(this,SettingsActivity::class.java))},
-   {showPage("Photos")},{galleryPage(true)},{showPage("Photos")})
+   {galleryPage(false)},{galleryPage(true)},{galleryPage(false)})
   for(i in titles.indices) {
-   val card=ClippedPhotoCard(this,14*scale).apply{id=nextId++;isFocusable=true;isFocusableInTouchMode=true;isClickable=true;background=rounded(Color.rgb(17,35,49),false);foreground=photoOutline(false);clipToOutline=true;contentDescription=titles[i];setOnClickListener{actions[i]()};setOnFocusChangeListener{_,focus->foreground=photoOutline(focus)}}
-   card.elevation=p(if(i==0)6 else 4).toFloat()
+   val card=ClippedPhotoCard(this,14*scale).apply{id=nextId++;isFocusable=true;isFocusableInTouchMode=true;isClickable=true;background=rounded(Color.rgb(17,35,49),false);foreground=states(photoOutline(true),photoOutline(false));contentDescription=titles[i];setOnClickListener{actions[i]()}}
    val image=OrientationPhotoView(this,true);card.addView(image,FrameLayout.LayoutParams(if(i<2)-1 else p(300),-1,Gravity.RIGHT))
-   val placeholder=ImageView(this).apply{setImageDrawable(HomeNavIcon(icons[i]).apply{setTint(Color.rgb(164,191,210))})};card.addView(placeholder,FrameLayout.LayoutParams(p(70),p(70),Gravity.CENTER).apply{bottomMargin=p(30)})
+   val placeholder=ImageView(this).apply{setImageDrawable(HomeNavIcon(icons[i]).apply{setTint(Color.rgb(164,191,210))})};card.addView(placeholder,if(i<2)FrameLayout.LayoutParams(p(70),p(70),Gravity.CENTER).apply{bottomMargin=p(30)}else FrameLayout.LayoutParams(p(70),p(70),Gravity.RIGHT or Gravity.CENTER_VERTICAL).apply{rightMargin=p(115)})
    card.addView(View(this).apply{background=GradientDrawable(if(i<2)GradientDrawable.Orientation.TOP_BOTTOM else GradientDrawable.Orientation.RIGHT_LEFT,if(i<2)intArrayOf(Color.TRANSPARENT,Color.argb(242,4,10,18))else intArrayOf(Color.TRANSPARENT,Color.argb(180,15,32,54),Color.rgb(15,32,54)))},FrameLayout.LayoutParams(-1,if(i<2)p(170)else -1,Gravity.BOTTOM))
    val caption=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL;setPadding(p(20),0,p(16),p(16))}
    val icon=ImageView(this).apply{setImageDrawable(HomeNavIcon(icons[i]).apply{setTint(if(i==2)Color.rgb(255,210,70)else Color.WHITE)})};caption.addView(icon,LinearLayout.LayoutParams(p(30),p(30)).apply{rightMargin=p(12)})
@@ -273,20 +308,19 @@ class HomeActivity:Activity() {
   updateHomePhotos()
   mediaHeading=headingAction("Continue Watching  ›",HomeLayout.MEDIA_HEADING_Y,"heading:1"){showPage("Continue Watching")}
   mediaHost=FrameLayout(this);place(mediaHost,HomeLayout.LEFT,HomeLayout.MEDIA_Y,HomeLayout.RIGHT-HomeLayout.LEFT,HomeLayout.MEDIA_H)
-  renderWatchItems(emptyList(),"loading")
+  // Coming back to Home shows the last feed on the next frame, so the page itself appears first;
+  // the refresh started below replaces the row only if something changed.
+  if(feedSeen){val token=epoch;handler.post{if(feedActive && token==epoch && page=="Home" && !isDestroyed)applyWatchItems(availableWatchItems)}}
+  else renderWatchItems(emptyList(),"loading")
   place(text("Quick access",32).apply{typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)},244,600,800,48)
-  val footerActions=listOf<Pair<String,()->Unit>>(
-   "YouTube" to {launchPackage("com.google.android.youtube.tv")},"Plex" to {launchPackage("com.plexapp.android")},
-   "Photos" to {launchPackage("com.synology.projectkailash")})
-  footerActions.forEachIndexed{i,(label,action)->
-   val view=tile(label,action)
-   val originalFocus=view.onFocusChangeListener
-   view.background=dockBackground(false);view.setOnFocusChangeListener{v,focused->originalFocus?.onFocusChange(v,focused);view.background=dockBackground(focused);view.foreground=if(focused)photoOutline(true)else null}
+  val dock=listOf(Triple("YouTube","com.google.android.youtube.tv","Watch videos together"),Triple("Plex","com.plexapp.android","Movies & TV shows"),Triple("Photos","com.synology.projectkailash","Open Synology Photos"))
+  dock.forEachIndexed{i,(label,pkg,subtitle)->
+   val view=tile(label){launchPackage(pkg)}
+   view.background=states(dockBackground(true),dockBackground(false))
    focusViews["footer:$i"]=view;place(view,244+i*555,HomeLayout.DOCK_Y,534,HomeLayout.DOCK_H)
-   val icon=if(i<3)try{packageManager.getApplicationIcon(listOf("com.google.android.youtube.tv","com.plexapp.android","com.synology.projectkailash")[i])}catch(_:Exception){HomeNavIcon("Apps").apply{setTint(titleColor)}}else HomeNavIcon(if(i==3)"Apps" else "Photos").apply{setTint(titleColor)}
+   val icon=AppIcons.load(this,pkg) ?: HomeNavIcon("Apps").apply{setTint(titleColor)}
    val longest=maxOf(icon.intrinsicWidth,icon.intrinsicHeight,1);icon.setBounds(0,0,p((64f*icon.intrinsicWidth.coerceAtLeast(1)/longest).toInt()),p((64f*icon.intrinsicHeight.coerceAtLeast(1)/longest).toInt()))
    view.setPadding(p(18),p(8),p(12),p(8));view.compoundDrawablePadding=p(20);val chevron=ActionChevron().apply{setTint(titleColor);setBounds(0,0,p(24),p(30))};view.setCompoundDrawables(icon,null,chevron,null)
-   val subtitle=listOf("Watch videos together","Movies & TV shows","Open Synology Photos")[i]
    view.text=android.text.SpannableString("$label\n$subtitle").apply{
     setSpan(android.text.style.StyleSpan(Typeface.BOLD),0,label.length,0)
     setSpan(android.text.style.RelativeSizeSpan(.76f),label.length+1,length,0)
@@ -302,9 +336,11 @@ class HomeActivity:Activity() {
  private val photoSignatures=mutableMapOf<String,IntArray>() // Only accessed by the image worker.
  private fun updateHomePhotos() {
   if(page!="Home" || photoSlots.size!=4)return
-  val files=photoFiles();val favs=favourites();val token=epoch
+  val token=epoch
   worker.execute {
    if(token!=epoch)return@execute
+   // Listing the photo cache and reading favourites touch storage, so they stay off the UI thread.
+   val files=photoFiles();val favs=favourites(files)
    val dayKey=HomePhotoPolicy.localDay(System.currentTimeMillis(),TimeZone.getTimeZone("Europe/London"))
    val dailyPrefs=getSharedPreferences("home-daily",0)
    val selectionKey="$dayKey:${dailyPrefs.getLong("row-day",Long.MIN_VALUE)}:${dailyPrefs.getInt("row-version",0)}:"+files.joinToString{it.name+":"+it.length()+":"+it.lastModified()}+":"+favs.joinToString{it.name}
@@ -324,6 +360,7 @@ class HomeActivity:Activity() {
    fun key(file:File)="${file.path}:${file.length()}:${file.lastModified()}"
    val activeKeys=files.map{key(it)}.toSet();photoSignatures.keys.retainAll(activeKeys)
    fun signature(file:File):IntArray? {
+    if(token!=epoch)return null // the page changed: this selection's result is discarded, so stop sampling
     val cacheKey=key(file);photoSignatures[cacheKey]?.let{return it}
     val image=try{PhotoDecoding.load(file,64,64)}catch(_:Exception){null} ?: return null
     val tiny=Bitmap.createScaledBitmap(image,12,12,true)
@@ -366,181 +403,253 @@ class HomeActivity:Activity() {
   val descriptions=listOf(if(photoCount==0)"No cached photos" else "Our favourite moments","All your family memories",if(favourite==null)"No favourites yet" else "Saved by you","$photoCount cached photos")
   photoSlots.forEachIndexed{i,slot->
    slot.detail.text=descriptions[i];focusViews["photo:$i"]?.contentDescription=listOf("Featured memory","Browse photos","Favourites","All Photos")[i]+", "+descriptions[i]
-   val file=selected[i];if(i==0)focusViews["photo:0"]?.setOnClickListener{file?.let{openPhoto(it)} ?: showPage("Photos")};slot.placeholder.visibility=if(file==null)View.VISIBLE else View.GONE
+   val file=selected[i];if(i==0)focusViews["photo:0"]?.setOnClickListener{file?.let{openPhoto(it)} ?: galleryPage(false)};slot.placeholder.visibility=if(file==null)View.VISIBLE else View.GONE
    if(slot.image.request(file?.name)) {
     if(file==null){slot.image.show(null,null);return@forEachIndexed}
+    // The two wide cards need more pixels than the small stacked pair.
+    val maxWidth=if(i<2)1024 else 512;val maxHeight=if(i<2)1080 else 512
+    val key=PhotoThumbs.key(file,maxWidth,maxHeight)
+    PhotoThumbs.get(key)?.let{saved->slot.image.show(saved.photo,saved.fill,saved.face);return@forEachIndexed}
     val token=epoch;val request=slot.image.requestVersion
     worker.execute {
      if(token!=epoch || slot.image.requestVersion!=request)return@execute
-     val bitmap=try{PhotoDecoding.load(file,768,900)}catch(_:Exception){null}
-     if(token!=epoch || slot.image.requestVersion!=request){bitmap?.recycle();return@execute}
-     val fill:Bitmap?=bitmap?.let{OrientationPhotoView.softFill(it)}
-     val face=bitmap?.let{HeroComposition.detect(it)}
-     handler.post{if(token==epoch && slot.image.requestVersion==request && !isDestroyed){slot.image.show(bitmap,fill,face);slot.placeholder.visibility=if(bitmap==null)View.VISIBLE else View.GONE}else{bitmap?.recycle();fill?.recycle()}}
+     val entry=decodeThumb(file,maxWidth,maxHeight,faces=true)?.also{PhotoThumbs.put(key,it)}
+     handler.post{if(token==epoch && slot.image.requestVersion==request && !isDestroyed){slot.image.show(entry?.photo,entry?.fill,entry?.face);slot.placeholder.visibility=if(entry==null)View.VISIBLE else View.GONE}}
     }
    }
   }
  }
- private fun photoTile(file:File?,label:String,detail:String="",media:Boolean=false,action:()->Unit):FrameLayout {
-  val card=ClippedPhotoCard(this,14*scale).apply { id=nextId++;isFocusable=true;isFocusableInTouchMode=true;isClickable=true;contentDescription=label;background=rounded(Color.rgb(16,35,48),false);foreground=rounded(Color.TRANSPARENT,false);clipToOutline=true }
+ /** Worker thread only. Home frames a face solely in portrait-ish photos, so landscapes skip detection. */
+ private fun decodeThumb(file:File,maxWidth:Int,maxHeight:Int,faces:Boolean):ThumbEntry? {
+  val bitmap=try{PhotoDecoding.load(file,maxWidth,maxHeight)}catch(_:Exception){null} ?: return null
+  val face=if(faces && bitmap.width<bitmap.height*1.1f)HeroComposition.detect(bitmap)else null
+  return ThumbEntry(bitmap,OrientationPhotoView.softFill(bitmap),face)
+ }
+ /** Continue Watching tile: artwork fills the card; title and remaining time sit on a bottom fade. */
+ private fun mediaCard(label:String,detail:String,action:()->Unit):FrameLayout {
+  val card=ClippedPhotoCard(this,14*scale).apply { id=nextId++;isFocusable=true;isFocusableInTouchMode=true;isClickable=true;contentDescription=label;background=rounded(Color.rgb(16,35,48),false);foreground=ring() }
   val image=ImageView(this).apply { scaleType=ImageView.ScaleType.CENTER_CROP }
   card.addView(image,FrameLayout.LayoutParams(-1,-1))
   card.addView(View(this).apply{background=GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,intArrayOf(Color.TRANSPARENT,Color.argb(235,1,8,14)))},FrameLayout.LayoutParams(-1,p(138),Gravity.BOTTOM))
-  val captions=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(p(if(media)16 else 28),0,p(12),p(if(media)14 else 18));gravity=Gravity.BOTTOM}
-  captions.addView(text(label,if(media)20 else 23).apply{typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL);maxLines=if(media)1 else 2;ellipsize=android.text.TextUtils.TruncateAt.END})
-  if(detail.isNotBlank())captions.addView(text(detail,if(media)18 else 22).apply{setTextColor(Color.LTGRAY);maxLines=1})
+  val captions=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(p(16),0,p(12),p(14));gravity=Gravity.BOTTOM}
+  captions.addView(text(label,20).apply{typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL);maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END})
+  if(detail.isNotBlank())captions.addView(text(detail,18).apply{setTextColor(Color.LTGRAY);maxLines=1})
   card.addView(captions,FrameLayout.LayoutParams(-1,p(100),Gravity.BOTTOM))
-  card.setOnFocusChangeListener { _,focus->card.foreground=rounded(Color.TRANSPARENT,focus) };card.setOnClickListener { action() }
-  if(file!=null){image.setImageResource(android.R.drawable.ic_menu_gallery);loadPhoto(file,image)}
+  card.setOnClickListener { action() }
   return card
  }
- private fun loadPhoto(file:File,view:ImageView) {
-  val token=epoch
-  worker.execute {
-   if(token!=epoch)return@execute
-   val bitmap=try { PhotoDecoding.load(file,if(page=="Home")768 else 512,if(page=="Home")1080 else 400) } catch(_:Exception) {null}
-   handler.post { if(token!=epoch || isFinishing)bitmap?.recycle() else if(bitmap!=null) {bitmaps.add(bitmap);view.setImageBitmap(bitmap)} }
-  }
- }
- /** Shared Plex tile: keep the complete artwork separate from a two-line title. */
+ /** Shared Plex tile: the whole poster over a soft fill of itself, above a separate two-line title. */
  private fun libraryCard(label:String,action:()->Unit):FrameLayout {
   val card=ClippedPhotoCard(this,14*scale).apply {
    id=nextId++;isFocusable=true;isFocusableInTouchMode=true;isClickable=true
-   contentDescription=label;background=rounded(Color.rgb(12,29,47),false)
+   contentDescription=label;background=rounded(Color.rgb(12,29,47),false);foreground=ring()
    setOnClickListener{action()}
-   setOnFocusChangeListener{_,focused->foreground=rounded(Color.TRANSPARENT,focused)}
   }
-  card.addView(ImageView(this).apply{scaleType=ImageView.ScaleType.FIT_CENTER;importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO},FrameLayout.LayoutParams(-1,p(210)))
-  card.addView(text(label,23).apply {
+  card.addView(OrientationPhotoView(this).apply{importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO},FrameLayout.LayoutParams(-1,p(HomeLayout.POSTER_H)))
+  card.addView(ImageView(this).apply{setImageDrawable(HomeNavIcon("Movies").apply{setTint(Color.rgb(96,124,150))});importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO},FrameLayout.LayoutParams(p(56),p(56),Gravity.CENTER_HORIZONTAL).apply{topMargin=p((HomeLayout.POSTER_H-56)/2)})
+  card.addView(text(label,22).apply {
    maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END
    gravity=Gravity.CENTER_VERTICAL;setPadding(p(16),0,p(16),0)
    typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
-  },FrameLayout.LayoutParams(-1,p(72),Gravity.BOTTOM))
+  },FrameLayout.LayoutParams(-1,p(HomeLayout.LIBRARY_CARD_H-HomeLayout.POSTER_H),Gravity.BOTTOM))
   return card
  }
  private fun catalog(category:String,index:Int){
   heading(category)
   val loading=text("Loading your Plex library…",28);place(loading,244,248,1500,68)
-  val token=epoch
+  val token=epoch;val refresh=catalogRefresh;catalogRefresh=false
   catalogWorker.execute{
    if(token!=epoch)return@execute
    try{
-    val result=PlexFeed.catalog(this,category,index)
+    val preview=previewCatalog
+    val result=preview?.invoke(category,index) ?: PlexFeed.catalog(this,category,index,refresh)
     handler.post{
      if(token!=epoch || isFinishing)return@post
      root.removeView(loading)
-     place(text("Latest additions · Plex",25),244,236,1500,52)
+     subheading("Latest additions · Plex"+if(index>0)" · Page ${index+1}" else "")
      val gridControls=mutableListOf<View>()
      result.items.forEachIndexed{position,item->
       val card=libraryCard(item.title){WatchItem(item.title,"com.plexapp.android",PlexProtocol.detailUri(item.server,item.key),"",-1,-1).open(this)}
       gridControls.add(card)
-      place(card,244+(position%5)*333,306+(position/5)*300,312,282)
-      val image=card.getChildAt(0) as ImageView
-      try{image.setImageDrawable(packageManager.getApplicationIcon("com.plexapp.android"));image.scaleType=ImageView.ScaleType.FIT_CENTER;image.setPadding(p(70),p(24),p(70),p(24))}catch(_:Exception){}
-      artworkWorker.execute imageJob@{if(token!=epoch)return@imageJob;val bitmap=if(item.thumb.isBlank())null else WatchNextReader.art(this,"plex-art://${item.server}/${item.key}");handler.post{if(token==epoch && bitmap!=null){bitmaps.add(bitmap);image.setPadding(0,0,0,0);image.scaleType=ImageView.ScaleType.FIT_CENTER;image.setImageBitmap(bitmap)}else bitmap?.recycle()}}
+      place(card,244+(position%5)*333,HomeLayout.LIBRARY_Y+(position/5)*(HomeLayout.LIBRARY_CARD_H+HomeLayout.GAP),312,HomeLayout.LIBRARY_CARD_H)
+      val poster=card.getChildAt(0) as OrientationPhotoView;val placeholder=card.getChildAt(1)
+      poster.request(item.key);val version=poster.requestVersion
+      val art=if(preview!=null)item.thumb else "plex-art://${item.server}/${item.key}"
+      val saved=ArtThumbs.get("poster:$art")
+      if(saved!=null){poster.show(saved.photo,saved.fill);placeholder.visibility=View.GONE}
+      else if(item.thumb.isNotBlank())artworkWorker.execute imageJob@{
+       if(token!=epoch)return@imageJob
+       val entry=WatchNextReader.art(this,art)?.let{ThumbEntry(it,OrientationPhotoView.softFill(it))}?.also{ArtThumbs.put("poster:$art",it)}
+       handler.post{if(token==epoch && poster.requestVersion==version && entry!=null){poster.show(entry.photo,entry.fill);placeholder.visibility=View.GONE}}
+      }
      }
      val navId=focusViews["nav:"+when(category){"TV Shows"->1;"Movies"->2;else->3}]?.id ?: View.NO_ID
-     gridControls.forEachIndexed{i,v->v.nextFocusLeftId=if(i%5==0)navId else gridControls[i-1].id;v.nextFocusRightId=if(i%5==4 || i==gridControls.lastIndex)v.id else gridControls[i+1].id;v.nextFocusUpId=if(i<5)v.id else gridControls[i-5].id;v.nextFocusDownId=if(i+5<gridControls.size)gridControls[i+5].id else v.id}
-     if(gridControls.isNotEmpty())focusViews.filterKeys{it.startsWith("nav:")}.values.forEach{it.nextFocusRightId=gridControls.first().id}
      if(result.items.isEmpty())place(text(if(category=="Anime")"No Anime library, Anime genre, or Japanese animation was found." else "No items found in this Plex category.",28),244,340,1500,110)
+     // Buttons sit left to right from the content edge, whichever of them are present.
      val pager=mutableListOf<View>()
-     fun pageButton(label:String,x:Int,action:()->Unit){val v=tile(label,action);pager.add(v);place(v,x,944,300,72)}
-     if(index>0)pageButton("Previous page",244){showCatalogPage(category,index-1)}
-     if(result.hasMore)pageButton("Next page",570){showCatalogPage(category,index+1)}
-     pageButton("Refresh",896){showCatalogPage(category,index)}
+     fun pageButton(label:String,action:()->Unit){val v=tile(label,action=action);place(v,244+pager.size*300,HomeLayout.PAGER_Y,280,72);pager.add(v)}
+     if(index>0)pageButton("Previous page"){showCatalogPage(category,index-1)}
+     if(result.hasMore)pageButton("Next page"){showCatalogPage(category,index+1)}
+     pageButton("Refresh"){showCatalogPage(category,index,refresh=true)}
      wireGrid(gridControls,5,pager)
-     pager.forEachIndexed{i,v->v.nextFocusUpId=gridControls.lastOrNull()?.id ?: navId;v.nextFocusLeftId=if(i==0)navId else pager[i-1].id;v.nextFocusRightId=if(i==pager.lastIndex)v.id else pager[i+1].id;v.nextFocusDownId=v.id}
-     restoreFocus()
+     // After paging or Refresh, focus returns to the same button when the new page still has it,
+     // so Next can be pressed again; otherwise to the first poster. Focus that moved on is left alone.
      val desired=catalogFocusAfterLoad;catalogFocusAfterLoad=null
-     if(desired!=null && currentFocus?.id==navId && hasWindowFocus()){
-      val target=if(desired=="@first")gridControls.firstOrNull() ?: pager.firstOrNull()else (gridControls+pager).firstOrNull{it.contentDescription?.toString()==desired}
-      target?.requestFocus()
-     }
+     if(desired==null)restoreFocus()
+     else if(root.findFocus()?.id==navId)((gridControls+pager).firstOrNull{it.contentDescription?.toString()==desired} ?: gridControls.firstOrNull() ?: pager.firstOrNull())?.requestFocus()
     }
    }catch(_:Exception){handler.post{if(token==epoch){loading.text="Could not load this Plex library. Check your server connection.";val retry=tile("Retry"){showCatalogPage(category,index)};val connect=tile("Plex connection"){safeStart(Intent(this,PlexConnectActivity::class.java))};place(retry,244,360,300,80);place(connect,570,360,400,80);wireGrid(listOf(retry,connect),2)}}}
   }
  }
  private var catalogPageIndex=0
  private var catalogFocusAfterLoad:String?=null
- private fun showCatalogPage(category:String,index:Int){catalogFocusAfterLoad=if(index==catalogPageIndex)currentFocus?.contentDescription?.toString()else "@first";catalogPageIndex=index;showPage(category)}
+ private var catalogRefresh=false
+ private fun showCatalogPage(category:String,index:Int,refresh:Boolean=false){catalogRefresh=refresh;catalogFocusAfterLoad=root.findFocus()?.contentDescription?.toString() ?: "@first";catalogPageIndex=index;showPage(category)}
  private fun galleryPage(favs:Boolean) { galleryFavourites=favs;galleryIndex=0;showPage("Photos") }
  private var galleryFavourites=false
  private var galleryIndex=0
+ private var galleryFocusLabel:String?=null
+ private var galleryNames=emptyList<String>()
  private fun gallery(favs:Boolean) {
   heading(if(favs)"Favourites" else "Your photos")
   val files=if(favs)favourites() else photoFiles()
-  place(text("Family memories · ${files.size} cached photos",23),244,236,1050,48)
-  val chips=listOf(tile("Favourites"){galleryPage(true)},tile("All"){galleryPage(false)})
-  chips.forEachIndexed{i,v->place(v,1514+i*184,236,174,58)}
-  galleryIndex=galleryIndex.coerceIn(0,maxOf(0,(files.size-1)/8))
+  galleryIndex=galleryIndex.coerceIn(0,maxOf(0,(files.size-1)/8));val pages=(files.size+7)/8
+  subheading("Family memories · ${files.size} cached photos"+if(pages>1)" · Page ${galleryIndex+1} of $pages" else "",1050)
+  val chips=listOf(tile("Favourites",selected=favs){galleryPage(true)},tile("All",selected=!favs){galleryPage(false)})
+  chips.forEachIndexed{i,v->place(v,1530+i*184,236,174,58)}
   if(files.isEmpty()) place(text(if(favs)"Open a photo to add it to your favourites." else "No cached photos yet. Open connection settings.",28),244,340,1450,90)
   val cards=files.drop(galleryIndex*8).take(8).mapIndexed{i,file->
-   val card=ClippedPhotoCard(this,14*scale).apply{id=nextId++;isFocusable=true;isFocusableInTouchMode=true;isClickable=true;contentDescription="View photo ${galleryIndex*8+i+1} of ${files.size}";foreground=rounded(Color.TRANSPARENT,false)}
+   val card=ClippedPhotoCard(this,14*scale).apply{id=nextId++;isFocusable=true;isFocusableInTouchMode=true;isClickable=true;contentDescription="View photo ${galleryIndex*8+i+1} of ${files.size}";foreground=ring()}
    val image=OrientationPhotoView(this);card.addView(image,FrameLayout.LayoutParams(-1,-1))
-   card.setOnClickListener{openPhoto(file)};card.setOnFocusChangeListener{_,focused->card.foreground=rounded(Color.TRANSPARENT,focused)}
+   card.setOnClickListener{openPhoto(file)}
    bindGalleryPhoto(image,file);place(card,244+(i%4)*416,316+(i/4)*300,396,280);card
   }
-  val actions=mutableListOf<View>()
-  actions.add(tile("Open Synology Photos"){launchPackage("com.synology.projectkailash")}.also{place(it,244,944,400,72)})
-  actions.add(tile("Browse all cached photos"){galleryPage(false)}.also{place(it,664,944,430,72)})
-  if(galleryIndex>0)actions.add(tile("Previous"){galleryIndex--;showPage("Photos")}.also{place(it,1114,944,220,72)})
-  if((galleryIndex+1)*8<files.size)actions.add(tile("Next page"){galleryIndex++;showPage("Photos")}.also{place(it,1354,944,250,72)})
+  // Actions sit left to right from the content edge, whichever of them are present.
+  val actions=mutableListOf<View>();var x=244
+  fun action(label:String,width:Int,run:()->Unit){val v=tile(label,action=run);place(v,x,HomeLayout.PAGER_Y,width,72);x+=width+20;actions.add(v)}
+  if(files.isEmpty() && !favs)action("Photo connection settings",440){safeStart(Intent(this,SettingsActivity::class.java))}
+  action("Open Synology Photos",400){launchPackage("com.synology.projectkailash")}
+  if(favs)action("Browse all photos",340){galleryPage(false)}
+  if(galleryIndex>0)action("Previous page",280){galleryIndex--;galleryFocusLabel="Previous page";showPage("Photos")}
+  if((galleryIndex+1)*8<files.size)action("Next page",280){galleryIndex++;galleryFocusLabel="Next page";showPage("Photos")}
   wireGrid(cards,4,actions,chips)
+  galleryNames=files.map{it.name}
+  // A remembered card that no longer exists (a favourite was removed) falls back to the last card.
+  pageFocus["Photos"]?.let{key->if(key.startsWith("grid:") && (key.substringAfter(':').toIntOrNull() ?: 0)>=cards.size)pageFocus["Photos"]=if(cards.isEmpty())"filter:0" else "grid:${cards.lastIndex}"}
+  // After paging, focus stays on the same button while the new page still has it (so it can be
+  // pressed again), otherwise it moves to the first photo. showPage restores this key afterwards.
+  galleryFocusLabel?.let{label->val same=actions.indexOfFirst{it.contentDescription?.toString()==label};pageFocus["Photos"]=if(same>=0)"action:$same" else "grid:0"}
+  galleryFocusLabel=null
  }
  private fun bindGalleryPhoto(view:OrientationPhotoView,file:File){
   val token=epoch;view.request(file.name);val version=view.requestVersion
-  worker.execute{if(token!=epoch)return@execute;val b=try{PhotoDecoding.load(file,800,600)}catch(_:Exception){null};val fill=b?.let{OrientationPhotoView.softFill(it)}
-   handler.post{if(token!=epoch || view.requestVersion!=version){b?.recycle();fill?.recycle()}else view.show(b,fill)}
+  val key=PhotoThumbs.key(file,800,600)
+  PhotoThumbs.get(key)?.let{saved->view.show(saved.photo,saved.fill);return}
+  worker.execute{
+   if(token!=epoch)return@execute
+   val entry=decodeThumb(file,800,600,faces=false)?.also{PhotoThumbs.put(key,it)}
+   handler.post{if(token==epoch && view.requestVersion==version)view.show(entry?.photo,entry?.fill)}
   }
  }
- private fun favourites():List<File> { if(previewFiles!=null)return emptyList();val ids=getSharedPreferences("favourites",0).getStringSet("ids",emptySet()) ?: emptySet();return photoFiles().filter { it.name.substringAfter('-') in ids } }
+ private fun favourites(files:List<File> = photoFiles()):List<File> { if(previewFiles!=null)return emptyList();val ids=getSharedPreferences("favourites",0).getStringSet("ids",emptySet()) ?: emptySet();return files.filter { it.name.substringAfter('-') in ids } }
  private fun openPhoto(file:File) {safeStart(Intent(this,PhotoViewerActivity::class.java).putExtra("photo",file.name))}
+ private data class AppEntry(val pkg:String,val label:String,val iconKey:String)
+ private var appEntries:List<AppEntry>?=null
+ private var appGrid:View?=null
+ private var appsLoading:View?=null
  private fun apps() {
-  heading("Apps");place(text("Installed applications · select an app to open",23),244,236,1500,48)
-  val intent=Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
-  val apps=packageManager.queryIntentActivities(intent,0).distinctBy {it.activityInfo.packageName}.sortedBy {it.loadLabel(packageManager).toString()}
+  heading("Apps");subheading("Installed applications · select an app to open")
+  appGrid=null;appsLoading=null
+  // The last listing is shown at once, but only while every icon for it is still in memory.
+  val known=appEntries
+  if(known!=null && known.all{AppIcons.has(it.iconKey)})showApps(known)
+  else appsLoading=text("Loading apps…",28).apply{setTextColor(quietColor)}.also{place(it,244,306,1500,68)}
+  val token=epoch
+  appsWorker.execute {
+   if(token!=epoch)return@execute
+   val pm=packageManager
+   // This listing carries its own icons, so a cache trim while it loads cannot leave tiles without one.
+   val icons=HashMap<String,Drawable.ConstantState>()
+   val entries=try{pm.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER),0)}catch(_:Exception){emptyList()}
+    .distinctBy{it.activityInfo.packageName}.map{info->
+     val key="app:"+info.activityInfo.packageName
+     (AppIcons.state(key) ?: try{val icon:Drawable?=info.loadIcon(pm);icon?.let{AppIcons.remember(key,it)}}catch(_:Exception){null})?.let{icons[key]=it}
+     AppEntry(info.activityInfo.packageName,info.loadLabel(pm).toString(),key)
+    }.sortedBy{it.label}
+   handler.post{
+    if(token==epoch && !isDestroyed && page=="Apps" && (entries!=appEntries || appGrid==null)){
+     appEntries=entries;showApps(entries,icons)
+     // A late listing still returns focus to the remembered app, unless the user has moved on.
+     if(root.findFocus()?.id==navViews.getOrNull(4)?.id)restoreFocus()
+    }
+   }
+  }
+ }
+ private fun showApps(entries:List<AppEntry>,icons:Map<String,Drawable.ConstantState>?=null) {
+  val focused=focusViews.entries.firstOrNull{it.key.startsWith("grid:") && it.value.hasFocus()}?.value?.tag
+  appsLoading?.let{root.removeView(it)};appsLoading=null
+  appGrid?.let{root.removeView(it)};focusViews.keys.filter{it.startsWith("grid:")}.forEach{focusViews.remove(it)}
   val scroll=ScrollView(this);val rows=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL};scroll.addView(rows)
   val controls=mutableListOf<View>()
-  apps.chunked(4).forEach{batch->val row=LinearLayout(this).apply{isBaselineAligned=false};batch.forEach{info->
-   val label=info.loadLabel(packageManager).toString()
-   val view=tile(label){launchPackage(info.activityInfo.packageName)}.apply{maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END;setTextSize(TypedValue.COMPLEX_UNIT_PX,22*scale)}
-   try{val icon=info.loadIcon(packageManager);icon.setBounds(0,0,p(64),p(64));view.setCompoundDrawables(icon,null,null,null);view.compoundDrawablePadding=p(18)}catch(_:Exception){view.text=label.take(1)+"  "+label}
+  entries.chunked(4).forEach{batch->val row=LinearLayout(this).apply{isBaselineAligned=false};batch.forEach{app->
+   val view=tile(app.label){launchPackage(app.pkg)}.apply{tag=app.pkg;maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END;setTextSize(TypedValue.COMPLEX_UNIT_PX,22*scale)}
+   val icon=icons?.get(app.iconKey)?.newDrawable(resources)?.mutate() ?: AppIcons.cached(this,app.iconKey)
+   if(icon!=null){icon.setBounds(0,0,p(64),p(64));view.setCompoundDrawables(icon,null,null,null);view.compoundDrawablePadding=p(18)}else view.text=app.label.take(1)+"  "+app.label
    controls.add(view);row.addView(view,LinearLayout.LayoutParams(contentPx(396),p(132)).apply{setMargins(0,0,contentPx(20),p(22))})
   };rows.addView(row)}
-  place(scroll,244,306,1648,710);wireGrid(controls,4)
+  // A late listing is inserted beneath this page's sidebar, so the expanded menu still covers it.
+  val params=FrameLayout.LayoutParams(contentPx(1648),p(710)).apply{leftMargin=p(HomeLayout.contentX(244,compactLayout));topMargin=p(306)}
+  val below=if(::sidebarPanel.isInitialized)root.indexOfChild(sidebarPanel)else -1
+  if(below>=0)root.addView(scroll,below,params)else root.addView(scroll,params)
+  appGrid=scroll;wireGrid(controls,4)
+  if(focused!=null)controls.firstOrNull{it.tag==focused}?.requestFocus()
  }
  private fun wireGrid(cards:List<View>,columns:Int,actions:List<View> = emptyList(),above:List<View> = emptyList()){
   cards.forEachIndexed{i,v->focusViews["grid:$i"]=v};actions.forEachIndexed{i,v->focusViews["action:$i"]=v};above.forEachIndexed{i,v->focusViews["filter:$i"]=v}
-  val nav=focusViews.filterKeys{it.startsWith("nav:")}.values.toList()
-  val navId=focusViews["nav:"+when(page){"TV Shows"->1;"Movies"->2;"Anime"->3;"Apps"->4;"Photos"->5;"Search"->6;else->7}]?.id ?: View.NO_ID
-  val first=above.firstOrNull() ?: cards.firstOrNull() ?: actions.firstOrNull()
+  val nav=navViews.toList()
+  val navId=focusViews["nav:"+when(page){"Continue Watching"->0;"TV Shows"->1;"Movies"->2;"Anime"->3;"Apps"->4;"Photos"->5;"Search"->6;else->7}]?.id ?: View.NO_ID
+  // Right from the sidebar lands on the first card; filters above the grid are one Up away.
+  val first=cards.firstOrNull() ?: above.firstOrNull() ?: actions.firstOrNull()
   nav.forEach{it.nextFocusRightId=first?.id ?: it.id}
-  cards.forEachIndexed{i,v->v.nextFocusLeftId=if(i%columns==0)navId else cards[i-1].id;v.nextFocusRightId=if(i%columns==columns-1 || i==cards.lastIndex)v.id else cards[i+1].id;v.nextFocusUpId=if(i<columns)above.getOrNull(i.coerceAtMost(above.lastIndex))?.id ?: v.id else cards[i-columns].id;v.nextFocusDownId=if(i+columns<cards.size)cards[i+columns].id else actions.getOrNull((i%columns).coerceAtMost(actions.lastIndex))?.id ?: v.id}
-  for(list in listOf(above,actions))list.forEachIndexed{i,v->v.nextFocusLeftId=if(i==0)navId else list[i-1].id;v.nextFocusRightId=list.getOrNull(i+1)?.id ?: v.id;v.nextFocusUpId=if(list===above)v.id else cards.lastOrNull()?.id ?: above.firstOrNull()?.id ?: navId;v.nextFocusDownId=if(list===above)cards.getOrNull(i)?.id ?: actions.firstOrNull()?.id ?: v.id else v.id}
+  val lastRow=if(cards.isEmpty())0 else (cards.size-1)/columns*columns
+  cards.forEachIndexed{i,v->
+   v.nextFocusLeftId=if(i%columns==0)navId else cards[i-1].id
+   v.nextFocusRightId=if(i%columns==columns-1 || i==cards.lastIndex)v.id else cards[i+1].id
+   v.nextFocusUpId=if(i<columns)above.getOrNull(i.coerceAtMost(above.lastIndex))?.id ?: v.id else cards[i-columns].id
+   // Below a shorter last row, Down still reaches that row; from the last row it reaches the buttons.
+   v.nextFocusDownId=when{i+columns<cards.size->cards[i+columns].id;i<lastRow->cards.last().id;else->actions.getOrNull((i%columns).coerceAtMost(actions.lastIndex))?.id ?: v.id}
+  }
+  above.forEachIndexed{i,v->
+   v.nextFocusLeftId=if(i==0)navId else above[i-1].id;v.nextFocusRightId=above.getOrNull(i+1)?.id ?: v.id;v.nextFocusUpId=v.id
+   v.nextFocusDownId=cards.getOrNull(i)?.id ?: actions.firstOrNull()?.id ?: v.id
+  }
+  actions.forEachIndexed{i,v->
+   v.nextFocusLeftId=if(i==0)navId else actions[i-1].id;v.nextFocusRightId=actions.getOrNull(i+1)?.id ?: v.id;v.nextFocusDownId=v.id
+   // Up goes to the card above this button in the last row, not always to the last card.
+   v.nextFocusUpId=cards.getOrNull(lastRow+i.coerceAtMost(cards.lastIndex-lastRow))?.id ?: above.firstOrNull()?.id ?: navId
+  }
  }
  private fun settingsPage(){
-  heading("Ambient TV settings");place(text("Manage devices, services and photo display",23),244,236,1500,48)
+  heading("Ambient TV settings");subheading("Manage devices, services and photo display")
   val groups=listOf(
    "TV & devices" to listOf(Triple("TV & inputs","Configure connected TV",{showPage("TV")}),Triple("Android settings","System settings",{safeStart(Intent(Settings.ACTION_SETTINGS))}),Triple("Android screensaver settings","Display and timeout",{safeStart(Intent(Settings.ACTION_DREAM_SETTINGS))})),
    "Connected services" to listOf(Triple("Connect Plex","Manage your media server",{safeStart(Intent(this,PlexConnectActivity::class.java))}),Triple("Open Projectivy","Launch your TV interface",{launchPackage("com.spocky.projengmenu")}),Triple("Photo connection settings",PhotoSync.summary(this).substringBefore("\n"),{safeStart(Intent(this,SettingsActivity::class.java))})).filter{it.first!="Open Projectivy" || packageManager.getLeanbackLaunchIntentForPackage("com.spocky.projengmenu")!=null},
    "Personalisation" to listOf(Triple("Photo screensaver","Family photos and timing",{safeStart(Intent(this,DreamSettingsActivity::class.java))}),Triple("Status & backup","Connections and local preferences",{safeStart(Intent(this,MaintenanceActivity::class.java))}),Triple("Restore hidden videos","${HomeDismissals.count(this)} hidden from Home",{restoreHiddenVideos()}),Triple("Start screensaver","Show family memories now",{startScreensaver()})))
   val controls=mutableMapOf<Pair<Int,Int>,View>()
-  groups.forEachIndexed{col,(title,entries)->place(text(title,26),244+col*554,316,530,48);entries.forEachIndexed{row,(label,detail,action)->val v=tile(label+"\n"+detail,action).apply{setTextSize(TypedValue.COMPLEX_UNIT_PX,23*scale);maxLines=3;val copy=android.text.SpannableString(text);val start=label.length+1;copy.setSpan(android.text.style.AbsoluteSizeSpan(p(20)),start,copy.length,0);text=copy};controls[col to row]=v;place(v,244+col*554,382+row*148,530,126)}}
+  groups.forEachIndexed{col,(title,entries)->place(text(title,26),244+col*554,316,530,48);entries.forEachIndexed{row,(label,detail,action)->val v=tile(label+"\n"+detail,action=action).apply{setTextSize(TypedValue.COMPLEX_UNIT_PX,23*scale);maxLines=3;val copy=android.text.SpannableString(text);val start=label.length+1;copy.setSpan(android.text.style.AbsoluteSizeSpan(p(20)),start,copy.length,0);text=copy};controls[col to row]=v;place(v,244+col*554,382+row*148,530,126)}}
   val navId=focusViews["nav:7"]!!.id
   controls.forEach{(pos,v)->val(c,r)=pos;v.nextFocusLeftId=controls[(c-1) to r]?.id ?: if(c==0)navId else controls[(c-1) to 0]?.id ?: navId;v.nextFocusRightId=controls[(c+1) to r]?.id ?: controls[(c+1) to 0]?.id ?: v.id;v.nextFocusUpId=controls[c to (r-1)]?.id ?: v.id;v.nextFocusDownId=controls[c to (r+1)]?.id ?: v.id}
-  focusViews.filterKeys{it.startsWith("nav:")}.values.forEach{it.nextFocusRightId=controls[0 to 0]!!.id}
+  navViews.forEach{it.nextFocusRightId=controls[0 to 0]!!.id}
   place(text("Settings open the existing Android TV, Plex and Synology integrations.",21),244,1000,1648,48)
  }
  private fun searchPage(){
-  heading("Search");place(text("Find videos on YouTube",23),244,236,1500,48)
-  place(text("Search for something to watch",30),244,344,1500,60)
-  val input=EditText(this).apply{id=nextId++;hint="Search YouTube…";setTextColor(titleColor);setHintTextColor(Color.LTGRAY);setTextSize(TypedValue.COMPLEX_UNIT_PX,28*scale);setSingleLine(true);imeOptions=android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH;background=rounded(Color.rgb(24,52,77),false);setPadding(p(24),p(10),p(24),p(10))}
-  input.setOnFocusChangeListener{_,focused->input.background=rounded(Color.rgb(24,52,77),focused)}
-  place(input,244,430,1200,96)
+  heading("Search");subheading("Find videos on YouTube")
+  val input=EditText(this).apply{id=nextId++;hint="Search YouTube…";setTextColor(titleColor);setHintTextColor(Color.LTGRAY);setTextSize(TypedValue.COMPLEX_UNIT_PX,28*scale);setSingleLine(true);imeOptions=android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH;background=states(rounded(Color.rgb(24,52,77),true),rounded(Color.rgb(24,52,77),false));setPadding(p(24),p(10),p(24),p(10))}
+  place(input,244,316,1200,96)
   fun submit(){val query=input.text.toString().trim();if(query.isNotEmpty()){(getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).hideSoftInputFromWindow(input.windowToken,0);val target=Intent(Intent.ACTION_VIEW,Uri.parse("https://www.youtube.com/results?search_query="+Uri.encode(query))).setPackage("com.google.android.youtube.tv");if(target.resolveActivity(packageManager)!=null)safeStart(target)else launchPackage("com.google.android.youtube.tv")}}
-  val submit=tile("Search YouTube"){submit()};place(submit,1464,430,424,96)
+  val submit=tile("Search YouTube"){submit()};place(submit,1464,316,424,96)
   input.setOnEditorActionListener{_,action,event->if(action==android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH || event?.keyCode==KeyEvent.KEYCODE_ENTER){if(event==null || event.action==KeyEvent.ACTION_UP)submit();true}else false}
-  place(text("Use your remote to type. Results open in YouTube.",24),244,550,1500,58)
+  place(text("Use your remote to type. Results open in YouTube.",24).apply{setTextColor(quietColor)},244,432,1500,58)
   wireGrid(listOf(input,submit),2)
  }
  private fun watchGrid(){
@@ -560,7 +669,7 @@ class HomeActivity:Activity() {
  private fun actionGrid(actions:List<Pair<String,()->Unit>>) {
   val scroll=ScrollView(this);val rows=LinearLayout(this).apply {orientation=LinearLayout.VERTICAL};scroll.addView(rows)
   val controls=mutableListOf<View>()
-  actions.chunked(3).forEach { batch -> val row=LinearLayout(this).apply{isBaselineAligned=false};batch.forEach { (label,action)->row.addView(tile(label,action).also{controls.add(it)},LinearLayout.LayoutParams(p(450),p(100)).apply {setMargins(0,0,p(20),p(20))}) };rows.addView(row) }
+  actions.chunked(3).forEach { batch -> val row=LinearLayout(this).apply{isBaselineAligned=false};batch.forEach { (label,action)->row.addView(tile(label,action=action).also{controls.add(it)},LinearLayout.LayoutParams(p(450),p(100)).apply {setMargins(0,0,p(20),p(20))}) };rows.addView(row) }
   place(scroll,244,280,1520,700);wireGrid(controls,3)
  }
  private fun startScreensaver() {
@@ -573,19 +682,11 @@ class HomeActivity:Activity() {
  }
  private fun openTv() {
   val intent=Intent(Intent.ACTION_VIEW,android.media.tv.TvContract.Channels.CONTENT_URI)
-  if(intent.resolveActivity(packageManager)!=null)safeStart(intent) else apps()
+  if(intent.resolveActivity(packageManager)!=null)safeStart(intent) else showPage("Apps")
  }
  private fun safeStart(intent:Intent) {try {
   val target=if(intent.action==Settings.ACTION_DREAM_SETTINGS && intent.resolveActivity(packageManager)==null){Toast.makeText(this,"Screen saver controls are in Android settings on this TV",Toast.LENGTH_LONG).show();Intent(Settings.ACTION_SETTINGS)}else intent
   startActivity(target)}catch(_:Exception){Toast.makeText(this,"Unable to open this item",Toast.LENGTH_SHORT).show()} }
- private fun search() {
-  val input=EditText(this).apply {hint="Search YouTube";setSingleLine(true)}
-  AlertDialog.Builder(this).setTitle("Find videos").setView(input).setPositiveButton("Search YouTube") {_,_->
-   val uri=Uri.parse("https://www.youtube.com/results?search_query="+Uri.encode(input.text.toString()))
-   val target=Intent(Intent.ACTION_VIEW,uri).setPackage("com.google.android.youtube.tv")
-   if(target.resolveActivity(packageManager)!=null)safeStart(target) else launchPackage("com.google.android.youtube.tv")
-  }.setNegativeButton("Cancel",null).show()
- }
  private val feedObserver=object:android.database.ContentObserver(handler){override fun onChange(selfChange:Boolean){loadWatchNext()}}
  private val feedReturnFinalRetry=Runnable{if(feedActive && page=="Home")loadWatchNext(true)}
  private val feedReturnRetry=Runnable{if(feedActive && page=="Home")loadWatchNext(true)}
@@ -600,7 +701,7 @@ class HomeActivity:Activity() {
    nativeWorker.queue.clear()
    nativeWorker.execute{
     val items=if(previewFiles!=null)previewWatch.orEmpty()else WatchNextReader.readNative(this)
-    handler.post{if(feedActive && token==epoch && page=="Home")applyWatchItems(items)}
+    handler.post{if(feedActive && token==epoch && page=="Home"){feedSeen=true;applyWatchItems(items)}}
    }
   }
  }
@@ -609,11 +710,11 @@ class HomeActivity:Activity() {
   if(force!=null){
    val token=epoch
    feedWorker.execute{
-    val available=if(previewFiles!=null)previewWatch.orEmpty()else WatchNextReader.read(this,force){native->handler.post{if(feedActive && token==epoch && page=="Home")applyWatchItems(native)}}
+    val available=if(previewFiles!=null)previewWatch.orEmpty()else WatchNextReader.read(this,force){native->handler.post{if(feedActive && token==epoch && page=="Home"){feedSeen=true;applyWatchItems(native)}}}
     handler.post{
      val current=feedState.finish()
      if(current && feedActive && token==epoch && page=="Home"){
-      applyWatchItems(available)
+      feedSeen=true;applyWatchItems(available)
       if(previewFiles==null)getSharedPreferences("feed-audit",0).edit().putLong("homeReadAt",System.currentTimeMillis()).putBoolean("lastForced",force).putInt("commits",getSharedPreferences("feed-audit",0).getInt("commits",0)+1).apply()
      }
      if(feedActive && feedState.hasPending){handler.removeCallbacks(feedRead);handler.postDelayed(feedRead,750)}
@@ -625,6 +726,8 @@ class HomeActivity:Activity() {
   if(page!="Home" || !::mediaHost.isInitialized)return
   feedState.request(forcePlex);handler.removeCallbacks(nativeRead);handler.postDelayed(nativeRead,250);handler.removeCallbacks(feedRead);handler.postDelayed(feedRead,750)
  }
+ // True once a real read has been applied since Home last became active; a hide/undo or the replay never sets it.
+ private var feedSeen=false
  private fun applyWatchItems(source:List<WatchItem>){
   availableWatchItems=source
   val available=source.filterNot{HomeDismissals.hidden(this,it) || (it.owner=="com.google.android.youtube.tv" && HomeDismissalPolicy.completed(it.position,it.duration))}
@@ -644,7 +747,7 @@ class HomeActivity:Activity() {
   val newIndex=ResumeFeedPolicy.focusIndex(oldKey,oldIndex,items.map{it.stableKey});displayedWatchItems=items
   mediaSignature=signature;mediaEpoch++;val revision=mediaEpoch;val token=epoch
   fun detach(v:View){if(v is ImageView)v.setImageDrawable(null);if(v is ViewGroup)for(i in 0 until v.childCount)detach(v.getChildAt(i))}
-  detach(mediaHost);mediaHost.removeAllViews();mediaBitmaps.forEach{if(!it.isRecycled)it.recycle()};mediaBitmaps.clear();focusViews.keys.filter{it.startsWith("media:")}.toList().forEach{focusViews.remove(it)}
+  detach(mediaHost);mediaHost.removeAllViews();mediaArtShown=0;focusViews.keys.filter{it.startsWith("media:")}.toList().forEach{focusViews.remove(it)}
   mediaHeading?.text="Continue Watching  ›"
   fun placeCard(card:View,i:Int){focusViews["media:$i"]=card;mediaHost.addView(card,FrameLayout.LayoutParams(contentPx(HomeLayout.MEDIA_W),p(HomeLayout.MEDIA_H)).apply{leftMargin=contentPx(i*416)})}
   if(items.isEmpty()) {
@@ -652,26 +755,33 @@ class HomeActivity:Activity() {
    mediaHost.addView(text(message,27).apply{setTextColor(Color.rgb(185,204,218));contentDescription=message},FrameLayout.LayoutParams(-1,p(90)).apply{topMargin=p(30)})
   } else items.forEachIndexed{i,item->
    val remaining=if(item.nextEpisode)"Next episode"else if(item.duration>0 && item.position>=0 && item.position<item.duration)"${(item.duration-item.position+59999)/60000} min left"else ""
-   val card=photoTile(null,item.title,detail=remaining,media=true){item.open(this)};placeCard(card,i);bindWatchOptions(card,item,i)
+   val card=mediaCard(item.title,remaining){item.open(this)};placeCard(card,i);bindWatchOptions(card,item,i)
    val source=if(item.owner=="com.plexapp.android")"Plex"else"YouTube"
    val watchedProgress=if(item.nextEpisode)null else WatchNextPolicy.progress(item.position,item.duration)
    card.contentDescription=item.title+", "+source+", hold OK for options"+(if(item.nextEpisode)", Next episode"else "")+(watchedProgress?.let{", ${it/10} percent watched"} ?: "")
-   val badge=text(if(item.nextEpisode)"Plex · Next"else source,17).apply{gravity=Gravity.CENTER;setPadding(p(7),p(3),p(7),p(3));background=rounded(Color.argb(225,6,16,27),false);try{val icon=packageManager.getApplicationIcon(item.owner);icon.setBounds(0,0,p(18),p(18));compoundDrawablePadding=p(5);setCompoundDrawables(icon,null,null,null)}catch(_:Exception){}}
+   val badge=text(if(item.nextEpisode)"Plex · Next"else source,17).apply{gravity=Gravity.CENTER;setPadding(p(7),p(3),p(7),p(3));background=rounded(Color.argb(225,6,16,27),false);AppIcons.load(this@HomeActivity,item.owner)?.let{icon->icon.setBounds(0,0,p(18),p(18));compoundDrawablePadding=p(5);setCompoundDrawables(icon,null,null,null)}}
    card.addView(badge,FrameLayout.LayoutParams(p(if(item.nextEpisode)145 else if(source=="Plex")89 else 126),p(32),Gravity.TOP or Gravity.RIGHT).apply{topMargin=p(9);rightMargin=p(9)})
    val image=card.getChildAt(0) as ImageView
-   try{image.setImageDrawable(packageManager.getApplicationIcon(item.owner))}catch(_:Exception){}
+   AppIcons.load(this,item.owner)?.let{image.setImageDrawable(it)}
    image.scaleType=ImageView.ScaleType.FIT_CENTER;image.setPadding(p(90),p(14),p(90),p(60))
+   // Decoded stills are shared with later rebuilds of this row, so an unchanged card never flickers.
+   val artKey="row:"+item.art
+   fun showArt(bitmap:Bitmap){image.setPadding(0,0,0,0);image.scaleType=ImageView.ScaleType.CENTER_CROP;image.setImageBitmap(bitmap);mediaArtShown++}
    fun loadArt(retry:Boolean){artworkWorker.execute imageJob@{
     if(token!=epoch || revision!=mediaEpoch || !feedActive)return@imageJob
-    val bitmap=WatchNextReader.art(this,item.art)
+    val bitmap=WatchNextReader.art(this,item.art)?.also{ArtThumbs.put(artKey,ThumbEntry(it,null))}
     handler.post{
-     if(token!=epoch || revision!=mediaEpoch || isDestroyed)bitmap?.recycle()
-     else if(bitmap!=null){mediaBitmaps.add(bitmap);image.setPadding(0,0,0,0);image.scaleType=ImageView.ScaleType.CENTER_CROP;image.setImageBitmap(bitmap)}
+     if(token!=epoch || revision!=mediaEpoch || isDestroyed)return@post
+     if(bitmap!=null)showArt(bitmap)
      else if(retry && feedActive)handler.postDelayed({if(feedActive && token==epoch && revision==mediaEpoch)loadArt(false)},3000)
     }
    }}
-   loadArt(true)
-   watchedProgress?.let{actual->card.addView(ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply{max=1000;progress=actual;progressTintList=android.content.res.ColorStateList.valueOf(if(source=="YouTube")Color.rgb(255,36,62)else Color.rgb(66,205,235));progressBackgroundTintList=android.content.res.ColorStateList.valueOf(Color.rgb(70,78,92))},FrameLayout.LayoutParams(-1,p(4),Gravity.BOTTOM))}
+   val saved=ArtThumbs.get(artKey);if(saved!=null)showArt(saved.photo)else loadArt(true)
+   watchedProgress?.let{actual->
+    // Two plain views cost far less to create than a themed ProgressBar.
+    card.addView(View(this).apply{setBackgroundColor(Color.rgb(70,78,92))},FrameLayout.LayoutParams(-1,maxOf(1,p(4)),Gravity.BOTTOM))
+    card.addView(View(this).apply{setBackgroundColor(if(source=="YouTube")Color.rgb(255,36,62)else Color.rgb(66,205,235))},FrameLayout.LayoutParams(contentPx(HomeLayout.MEDIA_W)*actual/1000,maxOf(1,p(4)),Gravity.BOTTOM or Gravity.LEFT))
+   }
   }
   wireFocus();if(focused!=null)(focusViews["media:$newIndex"] ?: focusViews["footer:0"])?.requestFocus()
  }

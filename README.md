@@ -35,6 +35,15 @@ photo upload or API key is required. Your existing services may have their own t
 views on an emulator. They contain no personal photos or account history. Weather
 and media accounts are not connected. They are not photographs of a household TV.*
 
+## New in 0.2.3
+
+- The expanded compact sidebar now sits on a solid panel that fades out to the right, so page headings and cards no longer show through the menu.
+- One focus style on every Home page and in the photo viewer: a white ring, plus a pale fill on text buttons. The current page is marked quietly in the sidebar.
+- Plex library tiles show the whole poster over a soft fill of itself. Paging buttons line up from the left edge.
+- The photo viewer keeps the picture visible: a caption bottom-left and two compact buttons bottom-right.
+- Faster page changes: decoded thumbnails, artwork and app icons are reused, the Apps list loads off the UI thread, and a library page opened in the last five minutes appears at once.
+- The Home clock follows the TV's own time zone.
+
 ## New in 0.2.2
 
 Compact mode now gives the content the space beside the narrow rail. Navigation expands over it with a translucent navy panel and a short transition; photos and controls stay fixed. Android’s disabled-animation preference is respected.

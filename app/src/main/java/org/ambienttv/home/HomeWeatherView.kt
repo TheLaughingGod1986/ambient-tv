@@ -7,7 +7,7 @@ internal class HomeWeatherView(c:Context):View(c) {
  private var panel=WeatherStore.panel(c)
  fun update(value:WeatherPanel){if(panel!=value){panel=value;contentDescription="${AppPreferences.weatherLabel(context)}, ${value.temperature}, ${value.condition}";invalidate()}}
  override fun onDraw(canvas:Canvas){
-  super.onDraw(canvas);canvas.save();canvas.scale(width/600f,height/110f)
+  super.onDraw(canvas);canvas.save();val unit=height/110f;canvas.scale(unit,unit)
   if(!AppPreferences.weatherEnabled(context)){
    paint.color=Color.WHITE;paint.typeface=Typeface.DEFAULT;paint.textSize=18f;canvas.drawText("AMBIENT TV",0f,24f,paint)
    paint.textSize=23f;canvas.drawText("Your photos. Your apps.",0f,73f,paint);canvas.restore();return

@@ -73,7 +73,9 @@ Home uses a large featured memory, Browse photos, and two stacked photo shortcut
 The three quick actions (YouTube, Plex, Synology Photos) precede four Continue
 Watching cards. All apps is in the sidebar; the screensaver remains in Settings.
 The compact sidebar reserves a 96px icon rail and a 28px gutter. Expanded labels
-use an opaque overlay without moving the content. All eight
+sit on a solid navy panel that fades out to the right (`SidebarScrim`), without
+moving the content, so page text never shows through the menu. Labels and widths
+change in one layout pass; only the fade's opacity animates. All eight
 pages share the mountain sunset and stacked clock/date treatment.
 
 Daily photo selection uses the Europe/London calendar day, retains its chosen
@@ -90,14 +92,15 @@ feed exists only in the instrumentation source, not in production content.
 
 ## Secondary-screen presentation
 
-TV Shows, Movies and Anime share the catalog renderer and `libraryCard`: artwork
-is contained above a separate two-line title, so labels do not obscure poster
-text. Category queries, ordering and pagination remain in PlexFeed. Photos uses
+TV Shows, Movies and Anime share the catalog renderer and `libraryCard`: the whole
+poster is shown over a soft fill of itself, above a separate two-line title, so
+labels do not obscure poster text. Category queries, ordering and pagination remain in PlexFeed. Photos uses
 two complete four-column rows with orientation-aware bounded thumbnails; Apps
 retains its installed-app listing in a scrollable four-column grid. Search uses
 the native IME and the existing YouTube intent. Settings keeps its real actions
-in three groups with a footer below the final card. The cached-photo viewer uses
-matching navy controls while retaining favourite and framing actions.
+in three groups with a footer below the final card. The cached-photo viewer keeps
+the photo visible: a caption bottom-left and two compact navy buttons bottom-right,
+sized on the same 1920x1080 grid as Home, with the favourite and framing actions.
 
 `wireGrid` registers secondary controls with the regression focus/bounds probe.
 Emulator checks cover 1080p and 720p, but cannot establish authenticated service
@@ -115,6 +118,35 @@ Plex catalog reads have a separate executor from image decoding. Page changes
 discard queued obsolete work, with generation checks on running jobs. The photo
 viewer drops queued intermediate frames during rapid navigation, hides controls
 after five seconds and consumes the first OK used to reveal them.
+
+Focus styling is state-driven: each control builds its focused and resting
+drawables once, so moving focus allocates nothing and needs no layout pass. The
+rule is the same on every page: a white ring, plus a pale fill on text tiles. The
+current page is marked quietly in the sidebar so a pale fill always means focus.
+
+Decoded pictures are reused across page changes. `PhotoThumbs` (16 MiB) holds
+Home and gallery thumbnails keyed by file identity and decode bounds; `ArtThumbs`
+(8 MiB, ten minutes) holds Continue Watching stills and Plex posters. Both are
+shared rather than owned by a view, are never recycled by a view, and are dropped
+when Home is hidden or memory is low. Downloaded artwork bytes are released only
+under real memory pressure. `AppIcons` keeps one decoded icon per package and
+hands each caller its own drawable; icons are forgotten when Home is hidden, so an
+updated app shows its new icon. The Apps listing, its labels and icons load on
+their own worker; the last listing is shown at once while its icons are in memory. A Plex library page read in the
+last five minutes is reused (Refresh reloads the page and forgets that library's
+other kept pages; the cache is cleared with the Plex session). Returning to Home from another page shows the last feed on
+the next frame, then replaces it only if the refresh differs; after Home has been
+paused it always starts from a fresh read. Automated coverage of these paths in
+this repository is limited: the layout constants and the underlying
+`BoundedTtlCache` are unit-tested and TvRegression checks page bounds and focus
+on an emulator, but the picture caches, the library page reuse and the feed reuse
+have no dedicated test, and nothing here has been timed on TV hardware.
+
+Grid pages share `wireGrid`: Right from the sidebar lands on the first card, Up
+from a button goes to the card above it, and Down from a row above a shorter last
+row still reaches that row. After paging, focus stays on the button that was
+pressed while the new page still has it, otherwise it moves to the first item.
+The Favourites grid is rebuilt on return from the viewer when its contents changed.
 
 TvRegression checks the unchanged-photo fast path, viewer hide/reveal, browsing,
 Back and restored Home focus at 1080p and 720p. These do not measure Sony-wide

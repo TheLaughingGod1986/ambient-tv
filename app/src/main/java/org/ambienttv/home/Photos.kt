@@ -14,7 +14,7 @@ object Photos {
  @Volatile private var lastAttempt = 0L
  const val UUID = "d170c0ec-f8a8-434d-9c5d-8090a556b827"
  fun dir(c: Context) = File(c.filesDir,"photos").apply { mkdirs() }
- fun files(c: Context) = dir(c).listFiles()?.filter { it.name.matches(Regex("[0-9]+-[0-9]+\\.jpg")) }?.sortedBy { it.name } ?: emptyList()
+ fun files(c: Context) = dir(c).listFiles()?.filter { ImagePolicy.valid(it.name) }?.sortedBy { it.name } ?: emptyList()
  fun status(c: Context): String {
   if(PhotoSync.enabled(c) && !PhotoSyncPolicy.open(System.currentTimeMillis(),PhotoSync.zone(c)))return PhotoSync.waiting(c)
   if(AppPreferences.demo(c))return "Demo photos · no account needed"

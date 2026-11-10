@@ -15,7 +15,7 @@ object WeatherStore {
   val data=read(c)
   return WeatherPanel.from(data,now,prefs(c).getLong("failedAt",0)>(data?.fetchedAt ?: 0))
  }
- @Synchronized fun refresh(c: Context) {
+ @Synchronized fun refresh(c: Context, done: (()->Unit)? = null) {
   val endpoint=AppPreferences.weatherEndpoint(c) ?: return
   val now=System.currentTimeMillis(); val prefs=prefs(c)
   val data=read(c)
@@ -34,7 +34,7 @@ object WeatherStore {
     val current=WeatherData.parse(String(bytes,Charsets.UTF_8),System.currentTimeMillis())
     prefs.edit().putString("data",current.json()).remove("failedAt").apply()
    } catch(_: Exception) { prefs.edit().putLong("failedAt",System.currentTimeMillis()).apply() }
-   finally { connection?.disconnect(); running=false }
+   finally { connection?.disconnect(); running=false; done?.invoke() }
   }
  }
  fun clear(c: Context) { prefs(c).edit().clear().apply() }
