@@ -7,12 +7,6 @@ object HeroGeometry {
   val area=if(width>0 && height>0 && width.toDouble()/height<1.3)1440.0 else 1920.0
   return HeroRect(((area-fit.width)/2).coerceAtLeast(0.0),(1080-fit.height)/2,fit.width,fit.height)
  }
- /** The photos that follow [current], up to three, never the one on screen and never a repeat. */
- fun upNext(size:Int,current:Int):List<Int> {
-  if(size<=1)return emptyList()
-  val index=Math.floorMod(current,size)
-  return (1..minOf(3,size-1)).map{(index+it)%size}
- }
 }
 
 internal data class HeroFade(val start:Float,val peak:Float,val end:Float)

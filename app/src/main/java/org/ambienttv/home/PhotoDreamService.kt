@@ -92,20 +92,38 @@ class PhotoDreamService:DreamService() {
    var face:FaceRegion?=null
    var heroBackground:Bitmap?=null
    var framing="auto"
-   var caption:Pair<String,String?>?=null
+   var captions=emptyList<HeroCaption>()
    try {
     if(files.isNotEmpty()) {
      if(heroStyle){
       val currentIndex=Math.floorMod(startIndex,files.size)
       framing=PhotoFraming.mode(applicationContext,files[currentIndex].name.substringAfter('-'))
-      bitmap=PhotoDecoding.load(files[currentIndex]);face=bitmap?.let{HeroComposition.detect(it)}
-      heroBackground=bitmap?.let{HeroBackdrop.create(it,face)}
-      count=1
-      // The strip shows what comes next, so nothing on it repeats the photo on screen.
-      val indices=HeroGeometry.upNext(files.size,currentIndex)
-      previews=indices.mapNotNull {index->try {PhotoDecoding.load(files[index],640,640)}catch(_:Exception){null}};selection=-1
       val times=try{org.json.JSONObject(getSharedPreferences("state",0).getString("photoTimes","{}").orEmpty())}catch(_:Exception){org.json.JSONObject()}
-      caption=PhotoCaption.lines(PhotoCaption.seconds(files[currentIndex].name,times),System.currentTimeMillis(),AppPreferences.birthdaySeconds(applicationContext))
+      val now=System.currentTimeMillis();val birth=AppPreferences.birthdaySeconds(applicationContext)
+      fun lines(index:Int)=PhotoCaption.lines(PhotoCaption.seconds(files[index].name,times),now,birth)
+      val main=PhotoDecoding.load(files[currentIndex])
+      // An upright photo shares the screen with the upright photos that follow it. A framing the
+      // owner chose for this photo is respected by showing it alone.
+      val want=if(main==null || framing!="auto")1 else HeroLayoutPolicy.count(main.width.toFloat()/main.height)
+      val partners=mutableListOf<Pair<Int,Bitmap>>();var contiguous=true;var offset=1
+      while(partners.size<want-1 && offset<minOf(files.size,8)){
+       val index=(currentIndex+offset)%files.size
+       val candidate=try{PhotoDecoding.load(files[index])}catch(_:Exception){null}
+       if(candidate!=null && HeroLayoutPolicy.upright(candidate.width.toFloat()/candidate.height))partners.add(index to candidate)
+       else{candidate?.recycle();contiguous=false}
+       offset++
+      }
+      if(main!=null && partners.isNotEmpty()){
+       val shown=listOf(currentIndex to main)+partners
+       bitmap=HeroComposite.compose(shown.map{it.second})
+       captions=HeroLayoutPolicy.panels(shown.size).mapIndexed{i,panel->HeroCaption(panel.first.toFloat(),lines(shown[i].first))}
+       // Skipping a landscape photo to find a partner must not drop it from the sequence.
+       count=if(contiguous)shown.size else 1
+      } else {
+       bitmap=main;face=main?.let{HeroComposition.detect(it)};count=1
+       captions=listOf(HeroCaption(0f,lines(currentIndex)))
+      }
+      heroBackground=bitmap?.let{HeroBackdrop.create(it,face)}
      } else {
      val candidates=DreamPolicy.indices(files.size,startIndex,3).map { files[it] }
      val sizes=candidates.map {
@@ -120,12 +138,12 @@ class PhotoDreamService:DreamService() {
      }
     }
    } catch(_:Exception) { /* Retain a previous frame on cache/decoder failure; weather/time remain live. */ }
-   val result=bitmap;val columns=count;val coveragePercent=fitPercent;val previewImages=previews;val selectedPreview=selection;val heroFace=face;val cachedBackdrop=heroBackground;val heroCaption=caption
+   val result=bitmap;val columns=count;val coveragePercent=fitPercent;val previewImages=previews;val selectedPreview=selection;val heroFace=face;val cachedBackdrop=heroBackground;val heroCaptions=captions
    handler.post {
     rendering=false
     if(!active || token!=generation) { result?.recycle();cachedBackdrop?.recycle();previewImages.forEach{it.recycle()};return@post }
     if(result!=null) {
-     if(picture is HeroDreamView)(picture as HeroDreamView).showHero(result,previewImages,selectedPreview,heroFace,cachedBackdrop,framing,heroCaption) else picture.show(result)
+     if(picture is HeroDreamView)(picture as HeroDreamView).showHero(result,previewImages,selectedPreview,heroFace,cachedBackdrop,framing,heroCaptions) else picture.show(result)
      startIndex=PhotoPoolPolicy.nextCursor(startIndex,columns,files.size)
      getSharedPreferences("dream",0).edit().putInt("cursor",startIndex).putString("cursorGeneration",sequenceKey).apply()
      val state=getSharedPreferences("dream-state",0)
