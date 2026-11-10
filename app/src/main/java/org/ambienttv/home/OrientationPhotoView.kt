@@ -52,11 +52,26 @@ internal class OrientationPhotoView(c:Context,private val homePolish:Boolean=fal
   c.drawBitmap(image,null,RectF(frame.left,frame.top,frame.left+frame.width,frame.top+frame.height),paint);paint.colorFilter=null
  }
  companion object {
-  /** Deliberately tiny soft fill, made on the existing image worker, never on the UI thread. */
+  /**
+   * Deliberately tiny soft fill, made on the existing image worker, never on the UI thread.
+   * The picture is halved step by step so every source pixel is averaged in; one large jump
+   * would sample only a few pixels and leave coarse, noisy blocks once stretched behind a poster.
+   */
   fun softFill(bitmap:Bitmap):Bitmap {
-   val factor=28f/maxOf(bitmap.width,bitmap.height)
-   val fill=Bitmap.createScaledBitmap(bitmap,(bitmap.width*factor).toInt().coerceAtLeast(1),(bitmap.height*factor).toInt().coerceAtLeast(1),true)
-   return if(fill===bitmap)bitmap.copy(Bitmap.Config.ARGB_8888,false)else fill
+   var current=bitmap
+   while(maxOf(current.width,current.height)>2*FILL_EDGE){
+    val half=Bitmap.createScaledBitmap(current,(current.width/2).coerceAtLeast(1),(current.height/2).coerceAtLeast(1),true)
+    if(current!==bitmap)current.recycle()
+    current=half
+   }
+   val factor=FILL_EDGE.toFloat()/maxOf(current.width,current.height)
+   val w=(current.width*factor).toInt().coerceAtLeast(1);val h=(current.height*factor).toInt().coerceAtLeast(1)
+   val small=Bitmap.createScaledBitmap(current,w,h,true)
+   if(current!==bitmap && current!==small)current.recycle()
+   val pixels=IntArray(w*h);small.getPixels(pixels,0,w,0,0,w,h)
+   if(small!==bitmap)small.recycle()
+   return Bitmap.createBitmap(FillBlur.smooth(pixels,w,h),w,h,Bitmap.Config.ARGB_8888)
   }
+  private const val FILL_EDGE=28
  }
 }

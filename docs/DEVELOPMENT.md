@@ -192,6 +192,12 @@ catalog/resume network monitor. Verified server connections are reused for up to
 not shared/recycled view bitmaps. Native artwork accepts bounded HTTP(S)
 redirects without allowing HTTPS downgrades.
 
+Plex artwork is fetched as stored. If that file exceeds the size bound or cannot
+be decoded on the TV, one further bounded request asks the same server's photo
+transcoder for a resized copy. The soft fill behind posters and photos is made by
+halving the decoded picture step by step and smoothing the tiny result
+(`FillBlur`), so it reads as a blur and not as blocks.
+
 A separately debounced native-provider read can update YouTube cards while Plex
 is still refreshing. It reads only the Watch Next columns used by Home. YouTube
 must publish eligible progress; neither this path nor retries read private

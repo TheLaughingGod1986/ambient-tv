@@ -88,15 +88,29 @@ internal object PlexFeed {
  fun art(c:Context,uri:android.net.Uri):Bitmap?{
   val snapshot=artSources
   val source=snapshot[uri.host+":"+uri.lastPathSegment] ?: return null
-  val thumb=source.thumb;val server=source.server
   return try{
    val key=source
    val now=android.os.SystemClock.elapsedRealtime()
-   val bytes=artwork.get(key,now) ?: PlexApi.request(c,server.base+thumb,server.token,maxBytes=6*1024*1024).also{artwork.put(key,it,android.os.SystemClock.elapsedRealtime())}
+   val bytes=artwork.get(key,now) ?: loadArt(c,source).also{artwork.put(key,it,android.os.SystemClock.elapsedRealtime())}
    val bounds=BitmapFactory.Options().apply{inJustDecodeBounds=true};BitmapFactory.decodeByteArray(bytes,0,bytes.size,bounds)
    if(snapshot!==artSources && artSources[uri.host+":"+uri.lastPathSegment]!=source)return null
    BitmapFactory.decodeByteArray(bytes,0,bytes.size,BitmapFactory.Options().apply{inSampleSize=BitmapPolicy.sampleSize(bounds.outWidth,bounds.outHeight,if(source.poster)384 else 768,if(source.poster)640 else 768)})
   }catch(_:Exception){null}
+ }
+ /**
+  * Server artwork as stored, or a copy resized by the same server when the stored file is too
+  * large to hold or is in a format this TV cannot read. Still one bounded request per attempt.
+  */
+ private fun loadArt(c:Context,source:ArtSource):ByteArray{
+  val server=source.server
+  val original=try{PlexApi.request(c,server.base+source.thumb,server.token,maxBytes=6*1024*1024)}catch(_:IllegalArgumentException){null}
+  if(original!=null && readable(original))return original
+  val resized=PlexProtocol.resizedArtPath(source.thumb,if(source.poster)384 else 768,if(source.poster)576 else 432)
+  return PlexApi.request(c,server.base+resized,server.token,maxBytes=2*1024*1024)
+ }
+ private fun readable(bytes:ByteArray):Boolean{
+  val bounds=BitmapFactory.Options().apply{inJustDecodeBounds=true};BitmapFactory.decodeByteArray(bytes,0,bytes.size,bounds)
+  return bounds.outWidth in 1..20000 && bounds.outHeight in 1..20000
  }
  @Synchronized fun catalog(c:Context,category:String,page:Int,refresh:Boolean=false):PlexCatalogPage{
   require(category in listOf("Movies","TV Shows","Anime") && page in 0..9)
