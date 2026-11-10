@@ -38,6 +38,7 @@ and media accounts are not connected. They are not photographs of a household TV
 ## New in 0.2.4
 
 - The fill beside Plex posters and photos is now a smooth blur instead of coarse blocks.
+- Optional earliest photo date in Photo connection settings: ignore pictures of the chosen person taken before a day you pick, for when the NAS has filed older photos of other people under the same name.
 - A poster whose stored artwork is very large or in a format the TV cannot read now loads as a resized copy from your own Plex server instead of staying blank.
 
 ## New in 0.2.3

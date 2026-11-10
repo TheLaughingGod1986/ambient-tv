@@ -154,6 +154,14 @@ latency or establish NAS availability. On API errors 102/104, Synology requests
 advertised API routing/version information and retries only a validated webapi
 CGI path. Person-membership validation and cached fallback remain required.
 
+## Earliest photo date
+
+Person membership comes from the NAS's own face matching, which can file older
+pictures of other people under the selected name. Photo connection settings accept
+an optional YYYY-MM-DD day (`PhotoDatePolicy`); photos captured before it are left
+out of the catalog before the recent/memory mix is chosen. Blank keeps every photo.
+Nothing on the NAS is changed, and membership validation still applies.
+
 ## Overnight NAS availability
 
 Photo connection settings can restrict photo acquisition to an overnight NAS
