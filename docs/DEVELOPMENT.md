@@ -181,7 +181,9 @@ nothing is dropped. A framing chosen for a photo is respected by showing it alon
 
 Each photo's caption is its capture month (or "N years ago today") and, with a
 birthday saved, the age then; nothing is drawn when the date is unknown. The header
-mirrors Home: weather top-left, clock top-right. `PhotoPoolPolicy.isScreenshot`
+mirrors Home: weather top-left, clock top-right. With one or two photos on screen a
+compact strip in the bottom-right corner shows the next three, above a slim bar that
+fills over `DreamPolicy.INTERVAL`; with three across only the bar is drawn. `PhotoPoolPolicy.isScreenshot`
 leaves PNG files out of the feed, since phone screenshots are PNG and camera photos
 are not. A refreshed pool is stored in `PhotoPoolPolicy.spread` order: sorted by
 capture time, then stepped through about 38% at a time, so burst shots are not

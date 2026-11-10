@@ -20,6 +20,13 @@ internal object HeroLayoutPolicy {
  const val VERY_TALL=.68f
  fun upright(ratio:Float)=ratio>0f && ratio<HomePhotoPolicy.UPRIGHT
  fun count(ratio:Float)=if(!upright(ratio))1 else if(ratio<VERY_TALL)3 else 2
+ /** Up to three photos that follow the ones on screen, starting at [next]; never one of [shown], never a repeat. */
+ fun upNext(size:Int,next:Int,shown:Set<Int>):List<Int> {
+  if(size<=0)return emptyList()
+  return (0 until size).map{Math.floorMod(next+it,size)}.filter{it !in shown}.distinct().take(3)
+ }
+ /** How far through the current slide we are, 0 to 1, for the bar that shows when the next one arrives. */
+ fun progress(elapsed:Long,interval:Long)=if(interval<=0)1f else (elapsed.toFloat()/interval).coerceIn(0f,1f)
  /** Left edge and width of each photo across the 1920px canvas; the last one absorbs any rounding. */
  fun panels(count:Int):List<Pair<Int,Int>> {
   require(count in 1..3)

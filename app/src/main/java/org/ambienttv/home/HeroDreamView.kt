@@ -78,9 +78,12 @@ internal class HeroDreamView(c:Context,private val previewPanel:WeatherPanel?=nu
   edge=edgeShader(bitmap,currentRect,face)
   context.getSharedPreferences("dream-state",0).edit().putBoolean("faceComposition",face!=null).putInt("heroWidth",fit.width.toInt()).apply()
   thumbs.forEach {it.recycle()};thumbs=previews;thumbColors=IntArray(previews.size){MutedPalette.muted(WeatherRenderer.sampleColor(previews[it]),8)}
-  val count=minOf(3,previews.size);val left=1860f-(count*280+(count-1).coerceAtLeast(0)*20)
+  // A marked preview (selection >= 0) uses the large strip; "up next" uses a compact one in the corner.
+  val compact=selection<0
+  val tileW=if(compact)112f else 280f;val tileH=if(compact)112f else 276f;val gap=if(compact)12f else 20f;val top=if(compact)872f else 664f
+  val count=minOf(3,previews.size);val left=1860f-(count*tileW+(count-1).coerceAtLeast(0)*gap)
   dotsLeft=(left+1860)/2-(count*23+(count-1).coerceAtLeast(0)*11)/2f
-  for(i in 0 until count){thumbRects[i].offsetTo(left+i*300,664f)}
+  for(i in 0 until count){val x=left+i*(tileW+gap);thumbRects[i].set(x,top,x+tileW,top+tileH)}
   for(i in 0 until count){val r=thumbRects[i];val zoom=maxOf(r.width()/previews[i].width,r.height()/previews[i].height);val w=previews[i].width*zoom;val h=previews[i].height*zoom;thumbImageRects[i].set(r.centerX()-w/2,r.centerY()-h/2,r.centerX()+w/2,r.centerY()+h/2)}
   selected=if(selection<0)-1 else selection.coerceIn(0,(previews.size-1).coerceAtLeast(0));changedAt=SystemClock.elapsedRealtime();invalidate()
  }
@@ -120,7 +123,7 @@ internal class HeroDreamView(c:Context,private val previewPanel:WeatherPanel?=nu
   drawLayer(previous,oldSoft,previousRect,oldEdge,255)
   drawLayer(current,soft,currentRect,edge,if(previous==null)255 else (fraction*255).toInt())
   // The side scrim only backs the optional preview strip; full-screen photos stay clear.
-  paint.alpha=255;if(thumbs.isNotEmpty())canvas.drawRect(0f,0f,1920f,1080f,scrim);canvas.drawRect(0f,0f,1920f,1080f,bottomScrim)
+  paint.alpha=255;if(thumbs.isNotEmpty() && selected>=0)canvas.drawRect(0f,0f,1920f,1080f,scrim);canvas.drawRect(0f,0f,1920f,1080f,bottomScrim)
   // Header row as on Home: weather in the top-left corner, clock in the top-right.
   canvas.drawRect(0f,0f,1920f,330f,topScrim)
   paint.setShadowLayer(10f,0f,2f,Color.argb(150,0,0,0))
@@ -151,14 +154,21 @@ internal class HeroDreamView(c:Context,private val previewPanel:WeatherPanel?=nu
    paint.color=Color.WHITE;paint.strokeWidth=2f;canvas.drawLine(x+2f,978f,x+54f,978f,paint)
   }
   paint.clearShadowLayer()
-  if(selected<0 && thumbs.isNotEmpty()){paint.typeface=normal;paint.textSize=18f;paint.color=Color.rgb(210,222,231);canvas.drawText("U P   N E X T",thumbRects[0].left+2f,646f,paint)}
+  if(selected<0 && thumbs.isNotEmpty()){paint.typeface=normal;paint.textSize=15f;paint.color=Color.rgb(222,231,240);paint.setShadowLayer(8f,0f,2f,Color.argb(150,0,0,0));canvas.drawText("U P   N E X T",thumbRects[0].left+2f,thumbRects[0].top-14f,paint);paint.clearShadowLayer()}
   for(i in 0 until minOf(3,thumbs.size)){
-   val r=thumbRects[i];clip.reset();clip.addRoundRect(r,14f,14f,Path.Direction.CW);canvas.save();canvas.clipPath(clip)
+   val r=thumbRects[i];val corner=if(selected<0)10f else 14f;clip.reset();clip.addRoundRect(r,corner,corner,Path.Direction.CW);canvas.save();canvas.clipPath(clip)
    paint.color=thumbColors[i];canvas.drawRect(r,paint)
    val photo=thumbs[i];backdrop.set(thumbImageRects[i])
    canvas.drawBitmap(photo,null,backdrop,paint);canvas.restore()
-   paint.style=Paint.Style.STROKE;paint.strokeWidth=if(i==selected)3f else 1.5f;paint.color=if(i==selected)Color.rgb(255,236,204)else Color.argb(150,233,242,250);canvas.drawRoundRect(r,14f,14f,paint);paint.style=Paint.Style.FILL
+   paint.style=Paint.Style.STROKE;paint.strokeWidth=if(i==selected)3f else 1.5f;paint.color=if(i==selected)Color.rgb(255,236,204)else Color.argb(150,233,242,250);canvas.drawRoundRect(r,corner,corner,paint);paint.style=Paint.Style.FILL
    if(selected>=0){paint.color=if(i==selected)Color.WHITE else Color.argb(100,240,248,255);canvas.drawRoundRect(dotsLeft+i*34,970f,dotsLeft+23+i*34,978f,4f,4f,paint)}
+  }
+  // A slim bar fills as the slide runs, so it is clear how long until the next photos arrive.
+  if(selected<0 && current!=null){
+   val barLeft=if(thumbs.isNotEmpty())thumbRects[0].left else 1620f
+   val done=HeroLayoutPolicy.progress(SystemClock.elapsedRealtime()-changedAt,DreamPolicy.INTERVAL)
+   paint.style=Paint.Style.FILL;paint.color=Color.argb(90,255,255,255);canvas.drawRoundRect(barLeft,1000f,1860f,1005f,2.5f,2.5f,paint)
+   paint.color=Color.WHITE;canvas.drawRoundRect(barLeft,1000f,barLeft+(1860f-barLeft)*done,1005f,2.5f,2.5f,paint)
   }
   if(current==null){paint.textAlign=Paint.Align.CENTER;paint.typeface=normal;paint.textSize=32f;paint.color=Color.WHITE;canvas.drawText("No cached photos available",700f,540f,paint)}
   canvas.restore();if(previous!=null)postInvalidateDelayed(100)

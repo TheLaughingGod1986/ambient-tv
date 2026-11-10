@@ -124,6 +124,10 @@ class PhotoDreamService:DreamService() {
        captions=listOf(HeroCaption(0f,lines(currentIndex)))
       }
       heroBackground=bitmap?.let{HeroBackdrop.create(it,face)}
+      // A compact strip of what comes next. Three photos across leave no clear corner for it.
+      val onScreen=(listOf(currentIndex)+partners.map{it.first}).toSet()
+      if(onScreen.size<3)previews=HeroLayoutPolicy.upNext(files.size,currentIndex+count,onScreen).mapNotNull{index->try{PhotoDecoding.load(files[index],256,256)}catch(_:Exception){null}}
+      selection=-1
      } else {
      val candidates=DreamPolicy.indices(files.size,startIndex,3).map { files[it] }
      val sizes=candidates.map {
