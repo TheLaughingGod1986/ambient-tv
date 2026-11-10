@@ -35,6 +35,11 @@ photo upload or API key is required. Your existing services may have their own t
 views on an emulator. They contain no personal photos or account history. Weather
 and media accounts are not connected. They are not photographs of a household TV.*
 
+## New in 0.2.4
+
+- The fill beside Plex posters and photos is now a smooth blur instead of coarse blocks.
+- A poster whose stored artwork is very large or in a format the TV cannot read now loads as a resized copy from your own Plex server instead of staying blank.
+
 ## New in 0.2.3
 
 - The expanded compact sidebar now sits on a solid panel that fades out to the right, so page headings and cards no longer show through the menu.

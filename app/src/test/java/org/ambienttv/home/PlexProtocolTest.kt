@@ -15,6 +15,9 @@ class PlexProtocolTest {
   val body=JSONObject("""{"MediaContainer":{"Hub":[{"Metadata":[{"ratingKey":"1","title":"Safe","viewOffset":10000,"duration":90000,"thumb":"/library/1"},{"ratingKey":"2","title":"External","viewOffset":10000,"duration":90000,"thumb":"https://elsewhere/2"},{"ratingKey":"3","title":"Query","viewOffset":10000,"duration":90000,"thumb":"/library/3?token=secret"}]}]}}""")
   assertEquals(listOf("Safe"),PlexProtocol.parseHub("server",body).map{it.title})
  }
+ @Test fun resizedArtworkStaysOnTheSameServerWithAnEncodedPath(){assertEquals("/photo/:/transcode?width=384&height=576&minSize=1&upscale=0&url=%2Flibrary%2Fmetadata%2F12%2Fthumb%2F1",PlexProtocol.resizedArtPath("/library/metadata/12/thumb/1",384,576))}
+ @Test(expected=IllegalArgumentException::class)fun resizedArtworkRejectsExternalAddresses(){PlexProtocol.resizedArtPath("//elsewhere.example/poster.jpg",384,576)}
+ @Test(expected=IllegalArgumentException::class)fun resizedArtworkRejectsTokenBearingPaths(){PlexProtocol.resizedArtPath("/library/metadata/1/thumb/1?X-Plex-Token=abc",384,576)}
  @Test fun usesNewLibraryDetailRouteWithEncodedKeyAndNoAutoplay(){assertEquals("plex://libraries/server-1/unmatched/%2Flibrary%2Fmetadata%2F123",PlexProtocol.detailUri("server-1","123"))}
  @Test(expected=IllegalArgumentException::class)fun rejectsMalformedMetadataKey(){PlexProtocol.detailUri("server","../123")}
  @Test fun authoritativeContinueHubIncludesOnlyUnwatchedNextEpisodes(){

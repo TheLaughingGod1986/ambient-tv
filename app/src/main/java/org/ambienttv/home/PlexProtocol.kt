@@ -24,6 +24,12 @@ object PlexProtocol {
   }
   return result.distinctBy{it.server+":"+it.ratingKey}.take(12)
  }
+ /** Path on the user's own Plex server that returns [thumb] scaled down to at most [width] x [height]. */
+ fun resizedArtPath(thumb:String,width:Int,height:Int):String{
+  require(thumb.startsWith("/") && !thumb.startsWith("//") && !thumb.contains("X-Plex-Token",ignoreCase=true))
+  require(width in 1..1920 && height in 1..1920)
+  return "/photo/:/transcode?width=$width&height=$height&minSize=1&upscale=0&url="+java.net.URLEncoder.encode(thumb,"UTF-8")
+ }
  fun detailUri(server:String,key:String):String{
   require(server.matches(Regex("[A-Za-z0-9_-]{1,128}")) && key.matches(Regex("[0-9]{1,16}")))
   return "plex://libraries/$server/unmatched/"+URLEncoder.encode("/library/metadata/$key","UTF-8")
