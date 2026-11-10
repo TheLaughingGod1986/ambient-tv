@@ -22,4 +22,14 @@ class HeroLayoutPolicyTest {
   val nineBySixteen=HomePhotoPolicy.featureFrame(900,1600,triple,1080,null)
   assertTrue(nineBySixteen.width>=triple-.5f && nineBySixteen.height>=1079.5f);assertTrue(1080/nineBySixteen.height>=.9f)
  }
+ @Test fun upNextFollowsTheShownPhotosWithoutRepeatingThem(){
+  assertEquals(listOf(2,3,4),HeroLayoutPolicy.upNext(48,2,setOf(0,1)))
+  assertEquals(listOf(47,2,3),HeroLayoutPolicy.upNext(48,47,setOf(0,1)))
+  assertEquals(listOf(1),HeroLayoutPolicy.upNext(2,1,setOf(0)))
+  assertTrue(HeroLayoutPolicy.upNext(1,1,setOf(0)).isEmpty());assertTrue(HeroLayoutPolicy.upNext(0,0,emptySet()).isEmpty())
+ }
+ @Test fun progressRunsFromEmptyToFullAndStaysInRange(){
+  assertEquals(0f,HeroLayoutPolicy.progress(0,60000),0f);assertEquals(.5f,HeroLayoutPolicy.progress(30000,60000),.0001f)
+  assertEquals(1f,HeroLayoutPolicy.progress(90000,60000),0f);assertEquals(0f,HeroLayoutPolicy.progress(-5,60000),0f)
+ }
 }
