@@ -1,6 +1,6 @@
 # What has been checked
 
-Public preview version: **0.2.5**. This report describes the generic repository,
+Public preview version: **0.2.6**. This report describes the generic repository,
 not a promise that every television and connected service behaves the same way.
 
 | Check | Result |
