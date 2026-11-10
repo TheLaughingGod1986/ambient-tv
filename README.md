@@ -43,6 +43,7 @@ and media accounts are not connected. They are not photographs of a household TV
 - Optional birthday for the chosen person: captions then show the age at the time, such as "3 weeks old". A photo taken on this day in an earlier year leads Home as "2 years ago today".
 - Movies, TV Shows and Anime show 16 poster-shaped tiles a page instead of 10.
 - Weather shows the day's chance of rain.
+- Favourites stay on the TV through photo refreshes (up to 16), instead of rotating out with the other memories.
 - Optional evening dimming of Home and the screensaver from 21:00 to 07:00, in Photo connection settings.
 
 ## New in 0.2.4

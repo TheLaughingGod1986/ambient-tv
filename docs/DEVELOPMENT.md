@@ -165,6 +165,9 @@ A cached photo taken on today's date in an earlier year leads the Home row, and
 `Photos.refresh` adds up to four such photos to the pool. All of this uses the
 capture time reported by the NAS; nothing is inferred from the picture.
 
+Up to `PhotoPoolPolicy.FAVOURITES` favourites that the NAS still offers are placed
+first in every refreshed pool, so a favourite stays until its owner removes it.
+
 ## Poster grid, rain and dimming
 
 Library pages show `HomeLayout.LIBRARY_COLUMNS` poster-shaped cards a row and

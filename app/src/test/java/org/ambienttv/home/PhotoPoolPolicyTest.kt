@@ -19,4 +19,11 @@ class PhotoPoolPolicyTest {
   assertEquals(0,PhotoPoolPolicy.startCursor("old","new",35,48));assertEquals(35,PhotoPoolPolicy.startCursor("same","same",35,48))
   assertEquals(listOf("100-1.jpg"),PhotoPoolPolicy.ordered(listOf("100-1.jpg","../bad.jpg"),"100-",listOf("../bad.jpg")))
  }
+ @Test fun favouritesStillOnTheNasKeepTheirPlaceUpToTheLimit(){
+  assertEquals(listOf(30,12),PhotoPoolPolicy.keptFavourites(setOf("12.jpg","30.jpg","99.jpg","not-a-photo"),setOf(12,30,31)))
+  val many=(1..40).map{"$it.jpg"}.toSet()
+  val kept=PhotoPoolPolicy.keptFavourites(many,(1..40).toSet())
+  assertEquals(PhotoPoolPolicy.FAVOURITES,kept.size);assertEquals(40,kept.first())
+  assertTrue(PhotoPoolPolicy.keptFavourites(emptySet(),setOf(1)).isEmpty())
+ }
 }
