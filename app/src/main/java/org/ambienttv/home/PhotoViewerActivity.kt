@@ -28,27 +28,34 @@ class PhotoViewerActivity:Activity() {
   val name=intent.getStringExtra("photo").orEmpty()
   if(!ImagePolicy.valid(name)) {finish();return}
   files=Photos.currentFiles(this);index=files.indexOfFirst{it.name==name};if(index<0){finish();return}
+  // Sizes follow the 1920x1080 design grid used by Home, not the display density.
+  val unit=minOf(resources.displayMetrics.widthPixels/1920f,resources.displayMetrics.heightPixels/1080f)
+  fun px(value:Int)=(value*unit).toInt()
   val frame=FrameLayout(this).apply{setBackgroundColor(Color.rgb(5,15,24))}
   image=ImageView(this).apply{scaleType=ImageView.ScaleType.FIT_CENTER};frame.addView(image,FrameLayout.LayoutParams(-1,-1))
-  val root=LinearLayout(this).apply {orientation=LinearLayout.VERTICAL;setBackgroundColor(Color.argb(225,5,15,24))};controls=root
+  // A short fade keeps the photo visible: the caption sits bottom-left, two compact actions bottom-right.
+  val root=LinearLayout(this).apply {
+   orientation=LinearLayout.HORIZONTAL;gravity=android.view.Gravity.BOTTOM;setPadding(px(64),px(96),px(64),px(44))
+   background=android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.BOTTOM_TOP,intArrayOf(Color.argb(240,3,10,18),Color.argb(170,3,10,18),Color.TRANSPARENT))
+  };controls=root
   frame.addView(root,FrameLayout.LayoutParams(-1,-2,android.view.Gravity.BOTTOM))
-  caption=TextView(this).apply{setTextColor(Color.WHITE);gravity=android.view.Gravity.CENTER};root.addView(caption)
-  button=Button(this);root.addView(button)
-  root.addView(Button(this).apply{text="Photo framing for screensaver";setOnClickListener{PhotoFraming.choose(this@PhotoViewerActivity,files[index].name.substringAfter('-'))}})
-  val density=resources.displayMetrics.density
-  caption.textSize=18f;caption.setPadding(16,12,16,12)
+  caption=TextView(this).apply{setTextColor(Color.rgb(240,247,252));setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX,26*unit);setLineSpacing(px(8).toFloat(),1f)}
+  root.addView(caption,LinearLayout.LayoutParams(0,-2,1f))
+  val actions=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL};root.addView(actions,LinearLayout.LayoutParams(px(460),-2))
+  button=Button(this);actions.addView(button)
+  actions.addView(Button(this).apply{text="Photo framing for screensaver";setOnClickListener{PhotoFraming.choose(this@PhotoViewerActivity,files[index].name.substringAfter('-'))}})
   // Native buttons retain their actions, with the same navy and pale focus language as Home.
-  for(i in 0 until root.childCount){val control=root.getChildAt(i);if(control is Button){
-   control.isAllCaps=false;control.textSize=20f
-   fun style(focused:Boolean){control.setTextColor(if(focused)Color.rgb(9,22,36)else Color.WHITE);control.background=android.graphics.drawable.GradientDrawable().apply{setColor(if(focused)Color.rgb(228,239,248)else Color.rgb(18,43,69));cornerRadius=14*density;setStroke((2*density).toInt(),if(focused)Color.WHITE else Color.rgb(55,81,109))}}
+  for(i in 0 until actions.childCount){val control=actions.getChildAt(i) as Button
+   control.isAllCaps=false;control.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX,24*unit);control.minHeight=0;control.minimumHeight=0;control.minWidth=0;control.minimumWidth=0;control.setPadding(px(20),0,px(20),0);control.stateListAnimator=null
+   fun style(focused:Boolean){control.setTextColor(if(focused)Color.rgb(9,22,36)else Color.rgb(240,247,252));control.background=android.graphics.drawable.GradientDrawable().apply{setColor(if(focused)Color.rgb(228,239,248)else Color.argb(235,17,36,51));cornerRadius=14*unit;setStroke(maxOf(1,px(if(focused)4 else 1)),if(focused)Color.WHITE else Color.rgb(82,121,171))}}
    style(false);control.setOnFocusChangeListener{_,focused->style(focused)}
-   control.layoutParams=LinearLayout.LayoutParams(-1,(56*density).toInt()).apply{setMargins((24*density).toInt(),(4*density).toInt(),(24*density).toInt(),(8*density).toInt())}
-  }}
+   control.layoutParams=LinearLayout.LayoutParams(-1,px(64)).apply{topMargin=if(i==0)0 else px(14)}
+  }
   setContentView(frame);button.requestFocus();showControls()
   button.setOnClickListener {val key=files[index].name.substringAfter('-');val prefs=getSharedPreferences("favourites",0);val ids=(prefs.getStringSet("ids",emptySet()) ?: emptySet()).toMutableSet();if(!ids.add(key))ids.remove(key);prefs.edit().putStringSet("ids",ids).apply();refreshLabel()}
   showPhoto()
  }
- private fun refreshLabel(){val key=files[index].name.substringAfter('-');button.text=if(key in (getSharedPreferences("favourites",0).getStringSet("ids",emptySet()) ?: emptySet()))"Remove from favourites" else "Add to favourites";caption.text="${index+1} / ${files.size}  ·  Left / right to browse  ·  Back to photos"}
+ private fun refreshLabel(){val key=files[index].name.substringAfter('-');button.text=if(key in (getSharedPreferences("favourites",0).getStringSet("ids",emptySet()) ?: emptySet()))"Remove from favourites" else "Add to favourites";caption.text="${index+1} / ${files.size}\nLeft / right to browse  ·  Back to photos"}
  private fun showPhoto(){
   refreshLabel();val request=++version;val file=files[index]
   worker.queue.clear()

@@ -7,13 +7,21 @@ import android.widget.FrameLayout
 
 /** Match the hardware outline in native software previews as well as on the TV. */
 internal class ClippedPhotoCard(c:Context,private val radius:Float):FrameLayout(c) {
- init {clipToOutline=true;setLayerType(View.LAYER_TYPE_HARDWARE,null)}
+ init {
+  // The card owns its rounded outline, so corners are clipped whether or not it has a background.
+  outlineProvider=object:android.view.ViewOutlineProvider(){override fun getOutline(view:View,outline:Outline){outline.setRoundRect(0,0,view.width,view.height,radius)}}
+  clipToOutline=true;setLayerType(View.LAYER_TYPE_HARDWARE,null)
+ }
  private val clip=Path()
  override fun onSizeChanged(w:Int,h:Int,oldw:Int,oldh:Int){super.onSizeChanged(w,h,oldw,oldh);clip.reset();clip.addRoundRect(RectF(0f,0f,w.toFloat(),h.toFloat()),radius,radius,Path.Direction.CW)}
  override fun dispatchDraw(canvas:Canvas){if(canvas.isHardwareAccelerated){super.dispatchDraw(canvas);return};val save=canvas.save();canvas.clipPath(clip);super.dispatchDraw(canvas);canvas.restoreToCount(save)}
 }
 
-/** Owns only decoded thumbnails. No network, face analysis, animation, or original downloads. */
+/**
+ * Shows decoded thumbnails. No network, face analysis, animation, or original downloads.
+ * The bitmaps belong to [PhotoThumbs] / [ArtThumbs] and may be on screen in more than one
+ * place, so this view only lets go of them and never recycles one.
+ */
 internal class OrientationPhotoView(c:Context,private val homePolish:Boolean=false):View(c) {
  private val paint=Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
  private var face:FaceRegion?=null
@@ -26,7 +34,7 @@ internal class OrientationPhotoView(c:Context,private val homePolish:Boolean=fal
  fun request(key:String?)=requests.request(key,hasPhoto)
  fun show(bitmap:Bitmap?,background:Bitmap?,subject:FaceRegion?=null) {
   face=subject
-  requests.complete();photo?.recycle();fill?.recycle();photo=bitmap;fill=background;invalidate()
+  requests.complete();photo=bitmap;fill=background;invalidate()
  }
  fun clear(){requests.clear();show(null,null)}
  override fun onDetachedFromWindow(){clear();super.onDetachedFromWindow()}

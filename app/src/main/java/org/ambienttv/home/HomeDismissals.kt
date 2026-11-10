@@ -8,14 +8,17 @@ import java.util.UUID
 
 /** Content identity never includes a provider row ID or playback position. */
 object HomeDismissalPolicy {
+ private val videoId=Regex("(?:[?&]v=|youtu\\.be/|/shorts/|/embed/|(?:S\\.)?video_id=)([A-Za-z0-9_-]{11})(?:[^A-Za-z0-9_-]|$)")
+ private val positionExtra=Regex("(?:i|l|S)\\.(?:position|start|start_time|start_time_ms)=.*")
+ private val positionSuffix=Regex(";(?:i|l|S)\\.(?:position|start|start_time|start_time_ms)=[^;]*")
  fun identity(owner:String,link:String):String {
   val decoded=try{URLDecoder.decode(link,"UTF-8")}catch(_:Exception){link}
-  val video=if(owner=="com.google.android.youtube.tv")Regex("(?:[?&]v=|youtu\\.be/|/shorts/|/embed/|(?:S\\.)?video_id=)([A-Za-z0-9_-]{11})(?:[^A-Za-z0-9_-]|$)").find(decoded)?.groupValues?.get(1) else null
+  val video=if(owner=="com.google.android.youtube.tv")videoId.find(decoded)?.groupValues?.get(1) else null
   val normalized=video?.let{"video:$it"} ?: try {
    val uri=URI(link.substringBefore("#Intent;"));val query=uri.rawQuery?.split('&')?.filterNot{it.substringBefore('=').lowercase() in setOf("t","start","time_continue","position","offset") }?.sorted()?.joinToString("&")
-   val extras=link.substringAfter("#Intent;","").split(';').filter{it.isNotBlank() && !it.matches(Regex("(?:i|l|S)\\.(?:position|start|start_time|start_time_ms)=.*"))}.sorted().joinToString(";")
+   val extras=link.substringAfter("#Intent;","").split(';').filter{it.isNotBlank() && !it.matches(positionExtra)}.sorted().joinToString(";")
    URI(uri.scheme,uri.authority,uri.path,query,null).toString()+if(extras.isEmpty())""else "#Intent;"+extras
-  }catch(_:Exception){decoded.replace(Regex(";(?:i|l|S)\\.(?:position|start|start_time|start_time_ms)=[^;]*"),"")}
+  }catch(_:Exception){decoded.replace(positionSuffix,"")}
   val digest=MessageDigest.getInstance("SHA-256").digest((owner+"|"+normalized).toByteArray())
   val hex="0123456789abcdef"
   return buildString(64){digest.forEach{val byte=it.toInt() and 255;append(hex[byte ushr 4]);append(hex[byte and 15])}}

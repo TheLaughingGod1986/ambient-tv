@@ -84,4 +84,12 @@ class HomePhotoPolicyTest {
    assertTrue((HomeLayout.DOCK_Y+HomeLayout.DOCK_H)*scale<=height-32*scale)
   }
  }
+ @Test fun twoLibraryRowsEndAboveThePagerAndKeepRoomForATwoLineTitle(){
+  val secondRowBottom=HomeLayout.LIBRARY_Y+2*HomeLayout.LIBRARY_CARD_H+HomeLayout.GAP
+  assertTrue(secondRowBottom+HomeLayout.GAP<=HomeLayout.PAGER_Y)
+  assertTrue(HomeLayout.PAGER_Y+72<=1080-32)
+  assertTrue(HomeLayout.LIBRARY_CARD_H-HomeLayout.POSTER_H>=60)
+  // A 2:3 poster shown whole in the poster area is narrower than the 312 wide tile.
+  assertTrue(HomeLayout.POSTER_H*2/3<312)
+ }
 }

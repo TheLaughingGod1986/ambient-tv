@@ -48,7 +48,7 @@ object WatchNextReader {
   if(Build.VERSION.SDK_INT<26)return emptyList()
   return try {
    val out=mutableListOf<WatchItem>();var rows=0;var continueRows=0;var youtubeRows=0;var youtubeNewest=0L
-   val seen=mutableSetOf<String>()
+   val seen=mutableSetOf<String>();val launchable=HashMap<String,Boolean>()
    c.contentResolver.query(android.media.tv.TvContract.WatchNextPrograms.CONTENT_URI,arrayOf("_id","package_name","watch_next_type","last_playback_position_millis","duration_millis","title","intent_uri","poster_art_uri","last_engagement_time_utc_millis"),null,null,"last_engagement_time_utc_millis DESC")?.use {cursor ->
     fun str(name:String):String {val i=cursor.getColumnIndex(name);return if(i>=0)cursor.getString(i).orEmpty() else ""}
     fun number(name:String):Long {val i=cursor.getColumnIndex(name);return if(i>=0 && !cursor.isNull(i))cursor.getLong(i) else -1}
@@ -62,7 +62,7 @@ object WatchNextReader {
      if(owner=="com.plexapp.android" && !ResumePolicy.isUnfinished(position,duration))continue
      if(owner=="com.google.android.youtube.tv" && HomeDismissalPolicy.completed(position,duration))continue
      val title=str("title");val link=str("intent_uri")
-     if(title.isBlank() || link.isBlank() || c.packageManager.getLeanbackLaunchIntentForPackage(owner)==null)continue
+     if(title.isBlank() || link.isBlank() || !launchable.getOrPut(owner){c.packageManager.getLeanbackLaunchIntentForPackage(owner)!=null})continue
      val item=WatchItem(title,owner,link,str("poster_art_uri"),position,duration,number("last_engagement_time_utc_millis").coerceAtLeast(0),number("_id"))
      if(out.count{it.owner==owner}<12 && seen.add(item.stableKey))out.add(item)
     }
@@ -112,7 +112,7 @@ object WatchNextReader {
    if(data==null)null else {
     val bounds=BitmapFactory.Options().apply{inJustDecodeBounds=true}
     BitmapFactory.decodeByteArray(data,0,data.size,bounds)
-    val decoded=BitmapFactory.decodeByteArray(data,0,data.size,BitmapFactory.Options().apply{inSampleSize=BitmapPolicy.sampleSize(bounds.outWidth,bounds.outHeight,512,320)})
+    val decoded=BitmapFactory.decodeByteArray(data,0,data.size,BitmapFactory.Options().apply{inSampleSize=BitmapPolicy.sampleSize(bounds.outWidth,bounds.outHeight,768,768)})
     if(decoded!=null && cached==null)artwork.put(value,data,android.os.SystemClock.elapsedRealtime())
     decoded
    }

@@ -66,6 +66,8 @@ object HomeLayout {
  fun contentWidth(width:Int,compact:Boolean)=if(!compact)width else width*(1888-COMPACT_LEFT)/(1888-244)
 
  const val LEFT=244;const val RIGHT=1888;const val PHOTO_Y=244;const val PHOTO_W=396;const val PHOTO_H=338;const val GAP=20
+ /** Plex library grid: two rows of tiles (poster area above a title strip) that end above the pager row. */
+ const val LIBRARY_Y=306;const val POSTER_H=234;const val LIBRARY_CARD_H=298;const val PAGER_Y=944
  const val MEDIA_HEADING_Y=764;const val MEDIA_Y=824;const val MEDIA_W=396;const val MEDIA_H=223;const val DOCK_Y=654;const val DOCK_H=100
  fun photoWidth(index:Int)=when(index){0->666;1->492;else->446}
  fun photoX(index:Int)=when(index){0->LEFT;1->930;else->1442}

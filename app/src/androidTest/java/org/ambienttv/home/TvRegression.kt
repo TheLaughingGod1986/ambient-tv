@@ -59,10 +59,14 @@ class TvRegression:Instrumentation(){
    capture("youtube-focused")
    main{h.focusForTest("footer:1");check(youtube!!.currentTextColor==android.graphics.Color.rgb(240,247,252))}
    capture("youtube-unfocused")
+   // Illustrative library rows exist only in this test; production pages read Plex.
+   HomeActivity.previewCatalog={_,index->PlexCatalogPage((1..PlexCatalogPolicy.PAGE_SIZE).map{PlexPoster("demo",(index*PlexCatalogPolicy.PAGE_SIZE+it).toString(),"Demo title $it: a deliberately long name to check wrapping","android.resource://org.ambienttv.home/"+R.drawable.home_mountains,(1000-it).toLong())},index<1,listOf("Demo"))}
    stage="pages"
    for(page in listOf("Home","TV Shows","Movies","Anime","Apps","Photos","Search","Settings")){
     stage="page: $page";main{h.showPageForTest(page)};waitFor{h.secondaryReadyForTest() && (page!="Home" || h.feedSnapshotForTest().size==4 && h.photoReadyForTest())};SystemClock.sleep(400)
     main{check(h.boundsForTest().values.all{it.left>=0 && it.top>=0 && it.right<=w && it.bottom<=height})}
+    if(page in listOf("TV Shows","Movies","Anime"))main{val keys=h.boundsForTest().keys;check(keys.count{it.startsWith("grid:")}==PlexCatalogPolicy.PAGE_SIZE && "action:1" in keys)}
+    if(page=="Apps")main{check(h.boundsForTest().keys.any{it.startsWith("grid:")})}
     capture(page.replace(' ','-'))
    }
    stage="photo viewer and restored Home focus"
@@ -107,7 +111,7 @@ class TvRegression:Instrumentation(){
    main{check(h.pageForTest()=="Home")}
    report.put("passed",true).put("width",w).put("height",height).put("pages",8).put("compactSidebar",true).put("contentDoesNotMove",true).put("directionalNavigation",true).put("mixedMedia",true).put("refreshPreservesFocus",true).put("enterAndBack",true).put("backupRoundTrip",true).put("dreamBack",true)
   }catch(e:Throwable){report.put("passed",false).put("error",stage+": "+e.javaClass.simpleName+": "+e.message)}
-  finally{targetContext.getSharedPreferences("home-ui",0).edit().putBoolean("compactSidebar",oldCompact).commit();HomeActivity.previewWatch=null;HomeActivity.previewFiles=null;HomeActivity.previewWeather=null;HomeActivity.previewResolution=null;home?.let{main{it.finish()}}}
+  finally{targetContext.getSharedPreferences("home-ui",0).edit().putBoolean("compactSidebar",oldCompact).commit();HomeActivity.previewWatch=null;HomeActivity.previewCatalog=null;HomeActivity.previewFiles=null;HomeActivity.previewWeather=null;HomeActivity.previewResolution=null;home?.let{main{it.finish()}}}
   File(targetContext.filesDir,"regression.json").writeText(report.toString(2));finish(if(report.optBoolean("passed"))Activity.RESULT_OK else Activity.RESULT_CANCELED,Bundle().apply{putString("regression",report.toString())})
  }
 }

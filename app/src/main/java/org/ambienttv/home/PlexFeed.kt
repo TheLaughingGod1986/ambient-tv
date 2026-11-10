@@ -12,6 +12,8 @@ internal object PlexFeed {
  private val servers=mutableMapOf<String,Server>()
  private var cached=emptyList<PlexResume>()
  private val catalogThumbs=mutableMapOf<String,String>()
+ // Revisiting a library page within five minutes reuses its listing. Cleared with the session.
+ private val catalogPages=mutableMapOf<String,Pair<Long,PlexCatalogPage>>()
  private val artwork=BoundedTtlCache<ArtSource,ByteArray>(4*1024*1024,900000){it.size}
  private data class ArtSource(val server:Server,val thumb:String,val poster:Boolean)
  @Volatile private var artSources=emptyMap<String,ArtSource>()
@@ -26,7 +28,7 @@ internal object PlexFeed {
  fun hasSession(c:Context)=PlexApi.vault(c).read()!=null
  fun status(c:Context)=c.getSharedPreferences("plex-status",0).getString("message","Connect Plex to add its Continue Watching items.")!!
  private fun status(c:Context,s:String){c.getSharedPreferences("plex-status",0).edit().putString("message",s).apply()}
- private fun resetSessionCache(){artSources=emptyMap();servers.clear();catalogThumbs.clear();artwork.clear();cached=emptyList();discoveredAt=0;refreshedAt=0;WatchNextReader.clearDirectPlex()}
+ private fun resetSessionCache(){artSources=emptyMap();servers.clear();catalogThumbs.clear();catalogPages.clear();artwork.clear();cached=emptyList();discoveredAt=0;refreshedAt=0;WatchNextReader.clearDirectPlex()}
  @Synchronized fun acceptSession(c:Context,token:String){resetSessionCache();HomeDismissals.rotatePlexScope(c);PlexApi.vault(c).save("https://plex.tv",token)}
  @Synchronized fun clear(c:Context){PlexApi.vault(c).clear();resetSessionCache();status(c,"Plex disconnected from Ambient TV.")}
  @Synchronized fun read(c:Context,force:Boolean=false):List<WatchItem>{
@@ -93,11 +95,18 @@ internal object PlexFeed {
    val bytes=artwork.get(key,now) ?: PlexApi.request(c,server.base+thumb,server.token,maxBytes=6*1024*1024).also{artwork.put(key,it,android.os.SystemClock.elapsedRealtime())}
    val bounds=BitmapFactory.Options().apply{inJustDecodeBounds=true};BitmapFactory.decodeByteArray(bytes,0,bytes.size,bounds)
    if(snapshot!==artSources && artSources[uri.host+":"+uri.lastPathSegment]!=source)return null
-   BitmapFactory.decodeByteArray(bytes,0,bytes.size,BitmapFactory.Options().apply{inSampleSize=BitmapPolicy.sampleSize(bounds.outWidth,bounds.outHeight,if(source.poster)384 else 512,if(source.poster)640 else 320)})
+   BitmapFactory.decodeByteArray(bytes,0,bytes.size,BitmapFactory.Options().apply{inSampleSize=BitmapPolicy.sampleSize(bounds.outWidth,bounds.outHeight,if(source.poster)384 else 768,if(source.poster)640 else 768)})
   }catch(_:Exception){null}
  }
- @Synchronized fun catalog(c:Context,category:String,page:Int):PlexCatalogPage{
+ @Synchronized fun catalog(c:Context,category:String,page:Int,refresh:Boolean=false):PlexCatalogPage{
   require(category in listOf("Movies","TV Shows","Anime") && page in 0..9)
+  val cacheKey="$category:$page"
+  // Refresh forgets every kept page of this library, not only the one shown: neighbouring
+  // pages kept from before could otherwise skip or repeat a title once the list has shifted.
+  if(refresh)catalogPages.keys.removeAll{it.startsWith("$category:")}
+  else catalogPages[cacheKey]?.let{(at,saved)->
+   if(servers.isNotEmpty() && ResumeFeedPolicy.fresh(android.os.SystemClock.elapsedRealtime(),at,300000)){publishCatalog(saved.items);return saved}
+  }
   read(c)
   if(servers.isEmpty())throw IllegalStateException("Connect Plex or check your server connection.")
   val count=(page+1)*PlexCatalogPolicy.PAGE_SIZE;val all=mutableListOf<PlexPoster>();val names=mutableListOf<String>();var total=0;var scanned=0
@@ -131,10 +140,16 @@ internal object PlexFeed {
    }
   }
   val items=PlexCatalogPolicy.page(all,page)
+  publishCatalog(items)
+  c.getSharedPreferences("plex-catalog-audit",0).edit().putString("category",category).putInt("page",page).putInt("count",items.size).putString("sections",org.json.JSONArray(names).toString()).apply()
+  val result=PlexCatalogPage(items,page<9 && total>(page+1)*PlexCatalogPolicy.PAGE_SIZE,names)
+  // An empty answer is never kept: a library that has just gained items should show them.
+  if(items.isNotEmpty())catalogPages[cacheKey]=android.os.SystemClock.elapsedRealtime() to result else catalogPages.remove(cacheKey)
+  return result
+ }
+ private fun publishCatalog(items:List<PlexPoster>){
   catalogThumbs.clear();items.forEach{if(it.thumb.isNotBlank())catalogThumbs[it.server+":"+it.key]=it.thumb}
   publishArtwork()
-  c.getSharedPreferences("plex-catalog-audit",0).edit().putString("category",category).putInt("page",page).putInt("count",items.size).putString("sections",org.json.JSONArray(names).toString()).apply()
-  return PlexCatalogPage(items,page<9 && total>(page+1)*PlexCatalogPolicy.PAGE_SIZE,names)
  }
 
 }
