@@ -24,7 +24,14 @@ internal object PhotoCaption {
   val a=utc(birth);val b=utc(taken)
   var months=(b.get(java.util.Calendar.YEAR)-a.get(java.util.Calendar.YEAR))*12+b.get(java.util.Calendar.MONTH)-a.get(java.util.Calendar.MONTH)
   if(b.get(java.util.Calendar.DAY_OF_MONTH)<a.get(java.util.Calendar.DAY_OF_MONTH))months--
-  return if(months<2)"${days/7} weeks old" else if(months<24)"$months months old" else if(months/12==1)"1 year old" else "${months/12} years old"
+  if(months<2)return "${days/7} weeks old"
+  if(months>=24)return "${months/12} years old"
+  if(months>=12)return "$months months old"
+  // In the first year a month is a long time: add the whole weeks since the last month was completed,
+  // so photos a few weeks apart do not carry the same age.
+  val reached=utc(birth).apply{add(java.util.Calendar.MONTH,months)}
+  val weeks=((taken-reached.timeInMillis/1000)/604800).toInt().coerceIn(0,4)
+  return "$months months"+(if(weeks==0)"" else if(weeks==1)", 1 week" else ", $weeks weeks")+" old"
  }
  /** Whole years between the capture day and today when both fall on the same day of the year; null otherwise. */
  fun yearsAgoToday(taken:Long,now:Long,zone:TimeZone=TimeZone.getTimeZone("Europe/London")):Int? {

@@ -2,7 +2,7 @@ plugins { id("com.android.application"); id("org.jetbrains.kotlin.android") }
 android {
  namespace = "org.ambienttv.home"
  compileSdk = 35
- defaultConfig { applicationId = "org.ambienttv.home"; minSdk = 23; targetSdk = 35; versionCode = 7; versionName = "0.2.5"; testInstrumentationRunner = providers.gradleProperty("tvTestRunner").getOrElse("org.ambienttv.home.TvRegression") }
+ defaultConfig { applicationId = "org.ambienttv.home"; minSdk = 23; targetSdk = 35; versionCode = 8; versionName = "0.2.6"; testInstrumentationRunner = providers.gradleProperty("tvTestRunner").getOrElse("org.ambienttv.home.TvRegression") }
  val releaseStore = providers.environmentVariable("AMBIENT_KEYSTORE").orNull
  signingConfigs {
   if (releaseStore != null) create("distribution") {
