@@ -28,7 +28,7 @@ internal object WeatherLocation {
  fun endpoint(latitude:String,longitude:String):String {
   val lat=latitude.trim().toDouble();val lon=longitude.trim().toDouble()
   require(lat.isFinite() && lon.isFinite() && lat in -90.0..90.0 && lon in -180.0..180.0)
-  return String.format(Locale.ROOT,"https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,weather_code,is_day&temperature_unit=celsius&timeformat=unixtime&timezone=auto&forecast_days=1",lat,lon)
+  return String.format(Locale.ROOT,"https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min&temperature_unit=celsius&timeformat=unixtime&timezone=auto&forecast_days=1",lat,lon)
  }
 }
 

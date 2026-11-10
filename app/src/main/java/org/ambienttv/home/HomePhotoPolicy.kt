@@ -17,25 +17,40 @@ object HomePhotoPolicy {
   val y=if(height<=targetH)(targetH-height)/2 else (targetH*.42f-focalY.coerceIn(0f,1f)*height).coerceIn(targetH-height,0f)
   return PhotoFrame(x,y,width,height)
  }
- /** Small portrait zoom only when the padded face remains entirely visible; unknown/group shots stay whole. */
+ /**
+  * Home tiles. A picture with one clear face is enlarged to fill the tile as far as the padded
+  * face stays entirely visible. Landscapes are only enlarged when that trims top and bottom,
+  * never the sides where other people stand. Without a detected face the picture is enlarged
+  * only until about a third of its height is off screen, trimmed a little more from the bottom than the top.
+  */
+ private const val MIN_VISIBLE=.66f
  fun featureFrame(w:Int,h:Int,tw:Int,th:Int,face:FaceRegion?):PhotoFrame {
-  if(w.toFloat()/h>=1.1f && abs(ln((w.toFloat()/h)/(tw.toFloat()/th)))>.18f) {
-   val scale=min(tw.toFloat()/w,th.toFloat()/h)
-   return PhotoFrame((tw-w*scale)/2,(th-h*scale)/2,w*scale,h*scale)
+  val ratio=w.toFloat()/h;val target=tw.toFloat()/th
+  val landscape=ratio>=1.1f
+  val contain=min(tw.toFloat()/w,th.toFloat()/h);val cover=max(tw.toFloat()/w,th.toFloat()/h)
+  if(landscape && abs(ln(ratio/target))<=.18f)return frame(w,h,tw,th)
+  if(landscape && ratio>target)return PhotoFrame((tw-w*contain)/2,(th-h*contain)/2,w*contain,h*contain)
+  if(face==null){
+   // No face to protect: enlarge towards filling the tile, but keep about two thirds of the height on screen,
+   // which is what a 4:3 picture needs to fill the widest tile.
+   val zoom=min(cover,contain/MIN_VISIBLE);val width=w*zoom;val height=h*zoom
+   return PhotoFrame((tw-width)/2,if(height<=th)(th-height)/2 else (th*.42f-.42f*height).coerceIn(th-height,0f),width,height)
   }
-  if(face==null || w.toFloat()/h>=1.1f)return frame(w,h,tw,th)
   val fh=(face.bottom-face.top).coerceAtLeast(1f);val fw=(face.right-face.left).coerceAtLeast(1f)
   val l=(face.left-fw*.3f).coerceAtLeast(0f);val r=(face.right+fw*.3f).coerceAtMost(w.toFloat())
   val t=(face.top-fh*.65f).coerceAtLeast(0f);val b=(face.bottom+fh*.45f).coerceAtMost(h.toFloat())
-  val contain=min(tw.toFloat()/w,th.toFloat()/h)
-  val zoom=min(contain*1.18f,min(tw/(r-l),th/(b-t))).coerceAtLeast(contain)
+  // Prefer room around the face. A close-up has no such room, so it may still be enlarged by the
+  // same bounded amount as an unknown picture, as long as the detected face itself stays whole.
+  val roomy=min(tw/(r-l),th/(b-t));val tight=min(tw/fw,th/fh)
+  val zoom=min(cover,max(roomy,min(contain/MIN_VISIBLE,tight))).coerceAtLeast(contain)
+  val padded=zoom<=roomy+.0001f
   val width=w*zoom;val height=h*zoom
   fun offset(size:Float,target:Int,start:Float,end:Float,anchor:Float):Float {
    if(size<=target)return (target-size)/2
    val low=max(target-size,-start*zoom);val high=min(0f,target-end*zoom)
    return if(low<=high)(target*anchor-(start+end)*.5f*zoom).coerceIn(low,high)else (target-size)/2
   }
-  return PhotoFrame(offset(width,tw,l,r,.5f),offset(height,th,t,b,.42f),width,height)
+  return PhotoFrame(offset(width,tw,if(padded)l else face.left,if(padded)r else face.right,.5f),offset(height,th,if(padded)t else face.top,if(padded)b else face.bottom,.42f),width,height)
  }
  /** Keep a varied pool near the best aspect fit, rather than repeatedly choosing one image. */
  fun fittingIds(ratios:Map<String,Float>,target:Float):Set<String> {

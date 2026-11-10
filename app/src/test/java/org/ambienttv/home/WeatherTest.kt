@@ -7,6 +7,14 @@ import org.json.JSONObject
 class WeatherTest {
  private val now=1792516800000L
  private fun response(temp: String="13.6",unit: String="°C",time: Long=now/1000,code: Int=3)= """{"current_units":{"temperature_2m":"$unit"},"current":{"time":$time,"temperature_2m":$temp,"weather_code":$code,"is_day":1}}"""
+ @Test fun todaysRangeIsOptionalAndSurvivesStorage() {
+  val withRange=response().dropLast(1)+""","daily":{"temperature_2m_max":[15.4],"temperature_2m_min":[7.6]}}"""
+  val data=WeatherData.stored(WeatherData.parse(withRange,now).json())
+  assertEquals("High 15°  ·  Low 8°",WeatherPanel.from(data,now).range)
+  assertNull(WeatherPanel.from(WeatherData.stored(WeatherData.parse(response(),now).json()),now).range)
+  val upsideDown=response().dropLast(1)+""","daily":{"temperature_2m_max":[2.0],"temperature_2m_min":[9.0]}}"""
+  assertNull(WeatherPanel.from(WeatherData.parse(upsideDown,now),now).range)
+ }
  @Test fun parsesCelsiusInSelectedTimezone() {
   val data=WeatherData.parse(response(),now)
   val panel=WeatherPanel.from(data,now,zone=java.util.TimeZone.getTimeZone("UTC"))

@@ -54,7 +54,7 @@ object Photos {
     val mixedIds=PhotoMixPolicy.select(recent.map{it.getInt("id")},archive.map{it.getInt("id")})
     // Keep today's visible memories in the authorised cache through background refreshes.
     val daily=c.getSharedPreferences("home-daily",0)
-    val pinned=if(daily.getLong("row-day",Long.MIN_VALUE)==HomePhotoPolicy.localDay(now,java.util.TimeZone.getTimeZone("Europe/London")))daily.getString("row-ids","").orEmpty().split(',').mapNotNull{it.toIntOrNull()}.filter{id->catalog.any{it.getInt("id")==id}}else emptyList()
+    val pinned=if(daily.getLong("row-day",Long.MIN_VALUE)==HomePhotoPolicy.localDay(now,java.util.TimeZone.getTimeZone("Europe/London")))daily.getString("row-ids","").orEmpty().split(',').mapNotNull{it.substringBefore('.').toIntOrNull()}.filter{id->catalog.any{it.getInt("id")==id}}else emptyList()
     val selectedIds=(pinned+mixedIds).distinct().take(PhotoPoolPolicy.LIMIT)
     val byId=catalog.associateBy{it.getInt("id")}
     val items=selectedIds.map{byId.getValue(it)}

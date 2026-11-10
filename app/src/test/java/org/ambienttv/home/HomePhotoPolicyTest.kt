@@ -23,9 +23,37 @@ class HomePhotoPolicyTest {
    assertEquals(900f/1600,f.width/f.height,.0001f)
    assertTrue(f.left+face.left*scale>=0 && f.left+face.right*scale<=510)
    assertTrue(f.top+face.top*scale>=0 && f.top+face.bottom*scale<=390)
-   assertTrue(scale<=390f/1600*1.181f)
+   assertTrue("never beyond filling the tile",scale<=510f/900+.0001f)
   }
-  assertEquals(HomePhotoPolicy.frame(900,1600,510,390),HomePhotoPolicy.featureFrame(900,1600,510,390,null))
+  val unknown=HomePhotoPolicy.featureFrame(900,1600,510,390,null)
+  assertEquals(900f/1600,unknown.width/unknown.height,.0001f)
+  assertTrue("about two thirds of an unknown portrait stays on screen",390/unknown.height>=.659f)
+  assertTrue(unknown.width<=510.01f && unknown.top<=0 && unknown.top+unknown.height>=390)
+  assertTrue("trimmed less from the top than the bottom",-unknown.top<unknown.top+unknown.height-390)
+ }
+ @Test fun singleFaceLandscapeFillsAWiderTileByTrimmingOnlyTopAndBottom() {
+  val face=FaceRegion(700f,300f,900f,560f)
+  val f=HomePhotoPolicy.featureFrame(1600,1200,666,338,face)
+  val scale=f.width/1600
+  assertEquals(666f,f.width,.5f);assertEquals(0f,f.left,.5f)
+  assertTrue(f.top<=0 && f.top+f.height>=338)
+  assertTrue(f.top+face.top*scale>=0 && f.top+face.bottom*scale<=338)
+ }
+ @Test fun unknownLandscapeFillsAWiderTileWithinTheHeightLimit() {
+  val f=HomePhotoPolicy.featureFrame(1600,1200,666,338,null)
+  assertEquals(666f,f.width,.5f);assertTrue(338/f.height>=.67f)
+ }
+ @Test fun closeUpFaceLimitsTheZoomSoItIsNeverCut() {
+  val face=FaceRegion(150f,200f,750f,1000f)
+  val f=HomePhotoPolicy.featureFrame(900,1200,492,338,face)
+  val scale=f.width/900
+  assertTrue(f.top+face.top*scale>=-.01f && f.top+face.bottom*scale<=338.01f)
+  assertTrue(f.width<492)
+  assertTrue("a close-up is still enlarged beyond showing the whole picture",f.height>338*1.3f)
+ }
+ @Test fun landscapeWiderThanItsTileIsNotCroppedAtTheSidesEvenWithAFace() {
+  val f=HomePhotoPolicy.featureFrame(1600,900,360,350,FaceRegion(700f,300f,900f,560f))
+  assertTrue(f.left>=0 && f.left+f.width<=360.01)
  }
  @Test fun heroAndThreeCompanionsKeepTheOriginalRowBounds() {
   assertTrue(HomeLayout.photoWidth(0)>HomeLayout.photoWidth(1)*1.3f)
