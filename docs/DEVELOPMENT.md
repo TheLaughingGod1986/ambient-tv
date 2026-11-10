@@ -168,6 +168,19 @@ capture time reported by the NAS; nothing is inferred from the picture.
 Up to `PhotoPoolPolicy.FAVOURITES` favourites that the NAS still offers are placed
 first in every refreshed pool, so a favourite stays until its owner removes it.
 
+## Hero screensaver presentation
+
+The hero caption is the photo's capture month (or "N years ago today") and, with a
+birthday saved, the age then; nothing is drawn when the date is unknown. Automatic
+framing enlarges an upright photo by at most `HeroComposition.UPRIGHT_ZOOM` around
+a detected face, because a larger zoom cut off people the detector had missed. The
+preview strip is `HeroGeometry.upNext`: the next three photos, never the one on
+screen. `PhotoPoolPolicy.isScreenshot` leaves PNG files out of the feed, since phone
+screenshots are PNG and camera photos are not.
+
+A refreshed pool is stored in `PhotoPoolPolicy.spread` order: sorted by capture time,
+then stepped through about 38% at a time, so burst shots are not shown back to back.
+
 ## Poster grid, rain and dimming
 
 Library pages show `HomeLayout.LIBRARY_COLUMNS` poster-shaped cards a row and

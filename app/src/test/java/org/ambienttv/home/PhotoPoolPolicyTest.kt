@@ -26,4 +26,15 @@ class PhotoPoolPolicyTest {
   assertEquals(PhotoPoolPolicy.FAVOURITES,kept.size);assertEquals(40,kept.first())
   assertTrue(PhotoPoolPolicy.keptFavourites(emptySet(),setOf(1)).isEmpty())
  }
+ @Test fun pngScreenshotsAreLeftOutButCameraPhotosStay(){
+  assertTrue(PhotoPoolPolicy.isScreenshot("IMG_1234.PNG"));assertTrue(PhotoPoolPolicy.isScreenshot("Screenshot 1.png "))
+  for(name in listOf("IMG_1234.HEIC","IMG_1234.jpg","photo.jpeg","png.jpg",""))assertFalse(PhotoPoolPolicy.isScreenshot(name))
+ }
+ @Test fun spreadOrderUsesEveryPhotoOnceAndKeepsNeighboursApart(){
+  for(count in 0..60){
+   val order=PhotoPoolPolicy.spread(count)
+   assertEquals((0 until count).toList(),order.sorted())
+   if(count>=8)for(i in 1 until count){val gap=kotlin.math.abs(order[i]-order[i-1]);assertTrue("count $count step $i",minOf(gap,count-gap)>=count/4)}
+  }
+ }
 }

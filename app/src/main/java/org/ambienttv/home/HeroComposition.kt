@@ -6,14 +6,16 @@ import kotlin.math.*
 data class FaceRegion(val left:Float,val top:Float,val right:Float,val bottom:Float)
 data class HeroPlacement(val left:Float,val top:Float,val width:Float,val height:Float)
 object HeroComposition {
+ /** At most this much enlargement of an upright photo, which keeps about 90% of its height on screen. */
+ const val UPRIGHT_ZOOM=1.12f
  fun place(w:Int,h:Int,face:FaceRegion?):HeroPlacement{
   val contain=1080f/h
   if(w.toFloat()/h<1.25f){
-   // Portraits can fill the reference's wider hero area when the detected
-   // subject fits. Unknown/tight subjects retain the complete photograph.
+   // An upright photo is enlarged only slightly around a detected face: a larger zoom
+   // cut off other people the detector had missed. Unknown subjects stay complete.
    if(face==null)return HeroPlacement(0f,0f,w*contain,1080f)
    val faceHeight=(face.bottom-face.top).coerceAtLeast(1f)
-   val target=min(1320f/w,contain*1.7f)
+   val target=min(1320f/w,contain*UPRIGHT_ZOOM)
    val scale=max(contain,min(target,1000f/faceHeight))
    val height=h*scale
    val ideal=470f-(face.top+face.bottom)*.5f*scale

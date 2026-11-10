@@ -12,8 +12,14 @@ class HeroGeometryTest {
    if(w.toDouble()/h<1.3)assertTrue(fit.left+fit.width<=1440.00001)
   }
  }
- @Test fun previewWindowAlwaysContainsCurrentWithoutDuplicates() {
-  for(size in 1..48)for(current in -2..100){val ids=HeroGeometry.previewIndices(size,current);assertEquals(minOf(3,size),ids.size);assertEquals(ids.size,ids.distinct().size);assertTrue(Math.floorMod(current,size) in ids)}
+ @Test fun upNextNeverShowsTheCurrentPhotoOrARepeat() {
+  for(size in 0..48)for(current in -2..100){
+   val ids=HeroGeometry.upNext(size,current)
+   assertEquals(minOf(3,(size-1).coerceAtLeast(0)),ids.size);assertEquals(ids.size,ids.distinct().size)
+   if(size>0)assertFalse(Math.floorMod(current,size) in ids)
+   assertTrue(ids.all{it in 0 until size})
+  }
+  assertEquals(listOf(47,0,1),HeroGeometry.upNext(48,46))
  }
  @Test fun thumbnailDecodeIsBoundedIndependentlyOfHero() {
   for((w,h) in listOf(20000 to 20000,6000 to 4000,4000 to 6000)){
