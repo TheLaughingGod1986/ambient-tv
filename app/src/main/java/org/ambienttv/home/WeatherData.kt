@@ -8,7 +8,7 @@ import java.util.TimeZone
 import kotlin.math.roundToInt
 
 /** Public area forecast only. No NAS data or device location is sent to the weather API. */
-data class WeatherData(val temperatureC: Double, val code: Int, val isDay: Boolean, val observedAt: Long, val fetchedAt: Long) {
+data class WeatherData(val temperatureC: Double, val code: Int, val isDay: Boolean, val observedAt: Long, val fetchedAt: Long, val highC: Double?=null, val lowC: Double?=null) {
  companion object {
   const val TTL = 30 * 60 * 1000L
   const val MAX_AGE = 6 * 60 * 60 * 1000L
@@ -22,14 +22,19 @@ data class WeatherData(val temperatureC: Double, val code: Int, val isDay: Boole
    require(time in (now-24*60*60*1000)..(now+15*60*1000))
    val day=current.getInt("is_day")
    require(day==0 || day==1)
-   return WeatherData(temp,current.getInt("weather_code"),day==1,time,now)
+   // Today's range is optional: an answer without it, or with an implausible one, still shows current conditions.
+   fun today(key:String)=json.optJSONObject("daily")?.optJSONArray(key)?.optDouble(0)?.takeIf{it.isFinite() && it in -80.0..60.0}
+   val high=today("temperature_2m_max");val low=today("temperature_2m_min")
+   val ranged=high!=null && low!=null && low<=high
+   return WeatherData(temp,current.getInt("weather_code"),day==1,time,now,if(ranged)high else null,if(ranged)low else null)
   }
   fun stored(json: String): WeatherData {
    val j=JSONObject(json)
-   return WeatherData(j.getDouble("temperatureC"),j.getInt("code"),j.getBoolean("day"),j.getLong("observedAt"),j.getLong("fetchedAt"))
+   return WeatherData(j.getDouble("temperatureC"),j.getInt("code"),j.getBoolean("day"),j.getLong("observedAt"),j.getLong("fetchedAt"),
+    if(j.has("highC"))j.getDouble("highC") else null,if(j.has("lowC"))j.getDouble("lowC") else null)
   }
  }
- fun json()=JSONObject().put("temperatureC",temperatureC).put("code",code).put("day",isDay).put("observedAt",observedAt).put("fetchedAt",fetchedAt).toString()
+ fun json()=JSONObject().put("temperatureC",temperatureC).put("code",code).put("day",isDay).put("observedAt",observedAt).put("fetchedAt",fetchedAt).apply{if(highC!=null && lowC!=null){put("highC",highC);put("lowC",lowC)}}.toString()
  fun condition(): String=when(code) {
   0 -> if(isDay) "Clear sky" else "Clear night"
   1 -> "Mainly clear"; 2 -> "Partly cloudy"; 3 -> "Overcast"
@@ -41,7 +46,7 @@ data class WeatherData(val temperatureC: Double, val code: Int, val isDay: Boole
  }
 }
 
-data class WeatherPanel(val temperature: String, val condition: String, val freshness: String, val code: Int?, val isDay: Boolean) {
+data class WeatherPanel(val temperature: String, val condition: String, val freshness: String, val code: Int?, val isDay: Boolean, val range: String?=null) {
  companion object {
   fun from(data: WeatherData?, now: Long, failed: Boolean=false, zone:TimeZone=TimeZone.getDefault()): WeatherPanel {
    if(data==null || now-data.observedAt>90*60*1000L || data.observedAt>now+900000)
@@ -49,7 +54,8 @@ data class WeatherPanel(val temperature: String, val condition: String, val fres
    val time=SimpleDateFormat("HH:mm",Locale.getDefault()).apply { timeZone=zone }.format(Date(data.observedAt))
    val stale=now-data.observedAt>90*60*1000
    val suffix=if(stale) " · stale" else if(failed) " · offline" else ""
-   return WeatherPanel("${data.temperatureC.roundToInt()}°C",data.condition(),"Updated $time$suffix",data.code.takeUnless { data.condition()=="Conditions unavailable" },data.isDay)
+   return WeatherPanel("${data.temperatureC.roundToInt()}°C",data.condition(),"Updated $time$suffix",data.code.takeUnless { data.condition()=="Conditions unavailable" },data.isDay,
+    if(data.highC!=null && data.lowC!=null)"High ${data.highC.roundToInt()}°  ·  Low ${data.lowC.roundToInt()}°" else null)
   }
  }
 }

@@ -75,7 +75,7 @@ class HomeActivity:Activity() {
  private var mediaSignature=nothingDrawn
  private var currentWatchItems=emptyList<WatchItem>()
  private var availableWatchItems=emptyList<WatchItem>()
- private data class PhotoSlot(val image:OrientationPhotoView,val detail:TextView,val placeholder:ImageView)
+ private data class PhotoSlot(val image:OrientationPhotoView,val detail:TextView,val placeholder:ImageView,val title:TextView,val icon:ImageView)
  @Volatile private var epoch=0
  private var scale=1f
  private var nextId=1000
@@ -299,10 +299,10 @@ class HomeActivity:Activity() {
    val caption=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL;setPadding(p(20),0,p(16),p(16))}
    val icon=ImageView(this).apply{setImageDrawable(HomeNavIcon(icons[i]).apply{setTint(if(i==2)Color.rgb(255,210,70)else Color.WHITE)})};caption.addView(icon,LinearLayout.LayoutParams(p(30),p(30)).apply{rightMargin=p(12)})
    val words=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
-   words.addView(text(titles[i],26).apply{typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL);maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END})
+   val title=text(titles[i],26).apply{typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL);maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END};words.addView(title)
    val detail=text("",18).apply{setTextColor(Color.rgb(204,216,228));maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END};words.addView(detail)
    caption.addView(words,LinearLayout.LayoutParams(0,-2,1f));caption.addView(text("›",44).apply{gravity=Gravity.CENTER;importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO},LinearLayout.LayoutParams(p(34),p(56)));card.addView(caption,FrameLayout.LayoutParams(-1,p(94),if(i<2)Gravity.BOTTOM else Gravity.CENTER_VERTICAL))
-   photoSlots.add(PhotoSlot(image,detail,placeholder));focusViews["photo:$i"]=card
+   photoSlots.add(PhotoSlot(image,detail,placeholder,title,icon));focusViews["photo:$i"]=card
    place(card,HomeLayout.photoX(i),HomeLayout.photoY(i),HomeLayout.photoWidth(i),HomeLayout.photoHeight(i))
   }
   updateHomePhotos()
@@ -345,7 +345,10 @@ class HomeActivity:Activity() {
    val dailyPrefs=getSharedPreferences("home-daily",0)
    val selectionKey="$dayKey:${dailyPrefs.getLong("row-day",Long.MIN_VALUE)}:${dailyPrefs.getInt("row-version",0)}:"+files.joinToString{it.name+":"+it.length()+":"+it.lastModified()}+":"+favs.joinToString{it.name}
    if(selectionKey==photoSelectionKey){
-    if(photoBoundEpoch!=token)handler.post{if(token==epoch && page=="Home"){bindHomePhotos(selectedPhotoIds.map{id->files.firstOrNull{it.name.substringAfter('-')==id}},files.size);photoBoundEpoch=token}}
+    if(photoBoundEpoch!=token){
+     val again=selectedPhotoIds.map{id->files.firstOrNull{it.name.substringAfter('-')==id}};val extras=homeExtras(again,files,dayKey)
+     handler.post{if(token==epoch && page=="Home"){bindHomePhotos(again,files.size,extras);photoBoundEpoch=token}}
+    }
     return@execute
    }
    photoSelectionRuns++
@@ -381,7 +384,7 @@ class HomeActivity:Activity() {
    val times=try{org.json.JSONObject(getSharedPreferences("state",0).getString("photoTimes","{}"))}catch(_:Exception){org.json.JSONObject()}
    fun related(a:File,b:File):Boolean {
     if(id(a)==id(b))return true
-    val ta=times.optLong(id(a));val tb=times.optLong(id(b))
+    val ta=PhotoCaption.seconds(a.name,times);val tb=PhotoCaption.seconds(b.name,times)
     if(ta>0 && tb>0 && kotlin.math.abs(ta-tb)<1800)return true
     return signature(a)?.let{x->signature(b)?.let{y->HomePhotoSimilarity.similar(x,y)}}==true
    }
@@ -395,14 +398,32 @@ class HomeActivity:Activity() {
    photoSelectionKey=selectionKey;selectedPhotoIds=selected
    if(previewFiles==null)prefs.edit().putInt("row-version",7).putLong("row-day",day).putString("row-ids",selected.joinToString(","){it.orEmpty()}).putString("previous-row",yesterday.joinToString(",")).putString("recent-rows",RecentPhotoHistory.encode(RecentPhotoHistory.remember(history,day,selected))).apply()
    val selectedFiles=selected.map{key->files.firstOrNull{id(it)==key}}
-   handler.post {if(token==epoch && page=="Home" && !isDestroyed){bindHomePhotos(selectedFiles,files.size);photoBoundEpoch=token}}
+   val extras=homeExtras(selectedFiles,files,day)
+   handler.post {if(token==epoch && page=="Home" && !isDestroyed){bindHomePhotos(selectedFiles,files.size,extras);photoBoundEpoch=token}}
   }
  }
- private fun bindHomePhotos(selected:List<File?>,photoCount:Int) {
-  val favourite=selected[2]
-  val descriptions=listOf(if(photoCount==0)"No cached photos" else "Our favourite moments","All your family memories",if(favourite==null)"No favourites yet" else "Saved by you","$photoCount cached photos")
+ /** Worker thread only: the featured photo's real month, and a spare photo for the third tile. */
+ private class HomeExtras(val featuredDate:String?,val spare:File?,val spareDate:String?)
+ private fun homeExtras(selected:List<File?>,files:List<File>,day:Long):HomeExtras {
+  val times=try{org.json.JSONObject(getSharedPreferences("state",0).getString("photoTimes","{}").orEmpty())}catch(_:Exception){org.json.JSONObject()}
+  fun month(file:File?)=file?.let{PhotoCaption.monthYear(PhotoCaption.seconds(it.name,times))}
+  val spare=if(selected.getOrNull(2)!=null)null else PhotoCaption.extra(files.map{it.name},selected.map{it?.name},day)?.let{name->files.firstOrNull{it.name==name}}
+  return HomeExtras(month(selected.getOrNull(0)),spare,month(spare))
+ }
+ private fun bindHomePhotos(chosen:List<File?>,photoCount:Int,extras:HomeExtras) {
+  val favourite=chosen[2]
+  // With nothing favourited yet the third tile shows one more memory under its own name, never as a favourite.
+  val spare=if(favourite==null)extras.spare else null
+  val selected=chosen.toMutableList().also{if(spare!=null)it[2]=spare}
+  val titles=listOf("Featured memory","Browse photos",if(spare!=null)"Another memory" else "Favourites","All Photos")
+  val descriptions=listOf(if(photoCount==0)"No cached photos" else extras.featuredDate ?: "Our favourite moments","All your family memories",
+   if(spare!=null)extras.spareDate ?: "Open to add it to favourites" else if(favourite==null)"No favourites yet" else "Saved by you","$photoCount cached photos")
   photoSlots.forEachIndexed{i,slot->
-   slot.detail.text=descriptions[i];focusViews["photo:$i"]?.contentDescription=listOf("Featured memory","Browse photos","Favourites","All Photos")[i]+", "+descriptions[i]
+   slot.title.text=titles[i];slot.detail.text=descriptions[i];focusViews["photo:$i"]?.contentDescription=titles[i]+", "+descriptions[i]
+   if(i==2){
+    slot.icon.setImageDrawable(HomeNavIcon(if(spare!=null)"Recent" else "Favourites").apply{setTint(if(spare!=null)Color.WHITE else Color.rgb(255,210,70))})
+    focusViews["photo:2"]?.setOnClickListener{if(spare!=null)openPhoto(spare) else galleryPage(true)}
+   }
    val file=selected[i];if(i==0)focusViews["photo:0"]?.setOnClickListener{file?.let{openPhoto(it)} ?: galleryPage(false)};slot.placeholder.visibility=if(file==null)View.VISIBLE else View.GONE
    if(slot.image.request(file?.name)) {
     if(file==null){slot.image.show(null,null);return@forEachIndexed}
@@ -419,10 +440,10 @@ class HomeActivity:Activity() {
    }
   }
  }
- /** Worker thread only. Home frames a face solely in portrait-ish photos, so landscapes skip detection. */
+ /** Worker thread only. A detected face lets a Home tile fill its frame without cutting that face. */
  private fun decodeThumb(file:File,maxWidth:Int,maxHeight:Int,faces:Boolean):ThumbEntry? {
   val bitmap=try{PhotoDecoding.load(file,maxWidth,maxHeight)}catch(_:Exception){null} ?: return null
-  val face=if(faces && bitmap.width<bitmap.height*1.1f)HeroComposition.detect(bitmap)else null
+  val face=if(faces)HeroComposition.detect(bitmap)else null
   return ThumbEntry(bitmap,OrientationPhotoView.softFill(bitmap),face)
  }
  /** Continue Watching tile: artwork fills the card; title and remaining time sit on a bottom fade. */
@@ -514,7 +535,7 @@ class HomeActivity:Activity() {
   heading(if(favs)"Favourites" else "Your photos")
   val files=if(favs)favourites() else photoFiles()
   galleryIndex=galleryIndex.coerceIn(0,maxOf(0,(files.size-1)/8));val pages=(files.size+7)/8
-  subheading("Family memories · ${files.size} cached photos"+if(pages>1)" · Page ${galleryIndex+1} of $pages" else "",1050)
+  subheading((if(favs)"Saved by you · ${files.size} "+(if(files.size==1)"photo" else "photos") else "Family memories · ${files.size} cached photos")+if(pages>1)" · Page ${galleryIndex+1} of $pages" else "",1050)
   val chips=listOf(tile("Favourites",selected=favs){galleryPage(true)},tile("All",selected=!favs){galleryPage(false)})
   chips.forEachIndexed{i,v->place(v,1530+i*184,236,174,58)}
   if(files.isEmpty()) place(text(if(favs)"Open a photo to add it to your favourites." else "No cached photos yet. Open connection settings.",28),244,340,1450,90)

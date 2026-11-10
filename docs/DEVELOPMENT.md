@@ -154,6 +154,18 @@ latency or establish NAS availability. On API errors 102/104, Synology requests
 advertised API routing/version information and retries only a validated webapi
 CGI path. Person-membership validation and cached fallback remain required.
 
+## Home tile framing and captions
+
+`HomePhotoPolicy.featureFrame` enlarges a picture to fill its Home tile only when
+one face was detected, and only as far as the padded face stays visible. A
+landscape is enlarged only when that trims top and bottom, not the sides. Without
+a detected face a picture is enlarged only until about a third of its height is off screen;
+any remaining space shows the soft fill.
+The featured tile and the viewer caption show the real capture date from the NAS
+(`PhotoCaption`); nothing is shown when the date is unknown. While nothing is
+favourited, the third tile is titled "Another memory" and opens that photo; it is
+never presented as a favourite.
+
 ## Earliest photo date
 
 Person membership comes from the NAS's own face matching, which can file older

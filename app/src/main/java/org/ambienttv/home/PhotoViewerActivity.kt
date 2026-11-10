@@ -22,11 +22,13 @@ class PhotoViewerActivity:Activity() {
  internal fun controlsVisibleForTest()=controls.visibility==android.view.View.VISIBLE
  internal fun indexForTest()=index
  private var files=emptyList<java.io.File>()
+ private var times=org.json.JSONObject()
  override fun onCreate(savedInstanceState:Bundle?) {
   super.onCreate(savedInstanceState)
   window.decorView.systemUiVisibility=android.view.View.SYSTEM_UI_FLAG_FULLSCREEN or android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
   val name=intent.getStringExtra("photo").orEmpty()
   if(!ImagePolicy.valid(name)) {finish();return}
+  times=try{org.json.JSONObject(getSharedPreferences("state",0).getString("photoTimes","{}").orEmpty())}catch(_:Exception){org.json.JSONObject()}
   files=Photos.currentFiles(this);index=files.indexOfFirst{it.name==name};if(index<0){finish();return}
   // Sizes follow the 1920x1080 design grid used by Home, not the display density.
   val unit=minOf(resources.displayMetrics.widthPixels/1920f,resources.displayMetrics.heightPixels/1080f)
@@ -55,7 +57,7 @@ class PhotoViewerActivity:Activity() {
   button.setOnClickListener {val key=files[index].name.substringAfter('-');val prefs=getSharedPreferences("favourites",0);val ids=(prefs.getStringSet("ids",emptySet()) ?: emptySet()).toMutableSet();if(!ids.add(key))ids.remove(key);prefs.edit().putStringSet("ids",ids).apply();refreshLabel()}
   showPhoto()
  }
- private fun refreshLabel(){val key=files[index].name.substringAfter('-');button.text=if(key in (getSharedPreferences("favourites",0).getStringSet("ids",emptySet()) ?: emptySet()))"Remove from favourites" else "Add to favourites";caption.text="${index+1} / ${files.size}\nLeft / right to browse  ·  Back to photos"}
+ private fun refreshLabel(){val key=files[index].name.substringAfter('-');button.text=if(key in (getSharedPreferences("favourites",0).getStringSet("ids",emptySet()) ?: emptySet()))"Remove from favourites" else "Add to favourites";val taken=PhotoCaption.fullDate(PhotoCaption.seconds(files[index].name,times));caption.text="${index+1} / ${files.size}"+(if(taken!=null)"  ·  $taken" else "")+"\nLeft / right to browse  ·  Back to photos"}
  private fun showPhoto(){
   refreshLabel();val request=++version;val file=files[index]
   worker.queue.clear()

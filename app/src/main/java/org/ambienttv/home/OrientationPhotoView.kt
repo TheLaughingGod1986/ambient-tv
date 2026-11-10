@@ -44,8 +44,8 @@ internal class OrientationPhotoView(c:Context,private val homePolish:Boolean=fal
   fill?.let{blur->
    val scale=maxOf(width.toFloat()/blur.width,height.toFloat()/blur.height)
    val w=blur.width*scale;val h=blur.height*scale
-   paint.alpha=if(homePolish)105 else 150;c.drawBitmap(blur,null,RectF((width-w)/2,(height-h)/2,(width+w)/2,(height+h)/2),paint);paint.alpha=255
-   c.drawColor(Color.argb(if(homePolish)95 else 65,3,10,17))
+   paint.alpha=if(homePolish)140 else 150;c.drawBitmap(blur,null,RectF((width-w)/2,(height-h)/2,(width+w)/2,(height+h)/2),paint);paint.alpha=255
+   c.drawColor(Color.argb(if(homePolish)70 else 65,3,10,17))
   }
   val frame=if(homePolish)HomePhotoPolicy.featureFrame(image.width,image.height,width.coerceAtLeast(1),height.coerceAtLeast(1),face)else HomePhotoPolicy.frame(image.width,image.height,width.coerceAtLeast(1),height.coerceAtLeast(1))
   paint.colorFilter=if(homePolish)warmth else null
