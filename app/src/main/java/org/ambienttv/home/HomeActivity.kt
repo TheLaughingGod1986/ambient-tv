@@ -240,15 +240,18 @@ class HomeActivity:Activity() {
    "TV"->{
     heading("TV & inputs")
     val actions=mutableListOf<Pair<String,()->Unit>>("Open TV" to {openTv()})
-    if(Build.VERSION.SDK_INT>=24)try {
-     val manager=getSystemService(android.content.Context.TV_INPUT_SERVICE) as android.media.tv.TvInputManager
-     manager.tvInputList.filter {it.isPassthroughInput}.forEach {input->
-      val title=input.loadLabel(this)?.toString()?.takeIf {it.isNotBlank()} ?: "TV input"
-      val intent=Intent(Intent.ACTION_VIEW,android.media.tv.TvContract.buildChannelUriForPassthroughInput(input.id))
-      if(intent.resolveActivity(packageManager)!=null)actions.add(title to {safeStart(intent)})
-     }
-    }catch(_:Exception){}
-    actions.add("Android input settings" to {safeStart(Intent("android.settings.TV_INPUT_SETTINGS"))});actionGrid(actions)
+    val inputs=passthroughInputs()
+    inputs.forEach{(_,title,intent)->actions.add(title to {safeStart(intent)})}
+    actions.add("Android input settings" to {safeStart(Intent("android.settings.TV_INPUT_SETTINGS"))})
+    // Two optional Home shortcuts: each press steps to the next input or the next name, so nothing is typed.
+    val pins=mutableListOf<Pair<String,()->Unit>>()
+    if(inputs.isNotEmpty())for(slot in 0 until HomeShortcuts.SLOTS){
+     fun inputLabel()="Home shortcut ${slot+1}: "+(inputs.firstOrNull{it.first==AppPreferences.shortcutInput(this,slot)}?.second ?: "off")
+     fun nameLabel()="Shortcut ${slot+1} name: "+AppPreferences.shortcutName(this,slot)
+     pins.add(inputLabel() to {AppPreferences.saveShortcut(this,slot,HomeShortcuts.nextInput(AppPreferences.shortcutInput(this,slot),inputs.map{it.first}),AppPreferences.shortcutName(this,slot));(currentFocus as? TextView)?.let{it.text=inputLabel();it.contentDescription=inputLabel()}})
+     pins.add(nameLabel() to {AppPreferences.saveShortcut(this,slot,AppPreferences.shortcutInput(this,slot),HomeShortcuts.nextName(AppPreferences.shortcutName(this,slot)));(currentFocus as? TextView)?.let{it.text=nameLabel();it.contentDescription=nameLabel()}})
+    }
+    actionGrid(actions+pins)
    }
    "Search"->searchPage()
    "Settings"->settingsPage()
@@ -313,22 +316,41 @@ class HomeActivity:Activity() {
   if(feedSeen){val token=epoch;handler.post{if(feedActive && token==epoch && page=="Home" && !isDestroyed)applyWatchItems(availableWatchItems)}}
   else renderWatchItems(emptyList(),"loading")
   place(text("Quick access",32).apply{typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)},244,600,800,48)
-  val dock=listOf(Triple("YouTube","com.google.android.youtube.tv","Watch videos together"),Triple("Plex","com.plexapp.android","Movies & TV shows"),Triple("Photos","com.synology.projectkailash","Open Synology Photos"))
-  dock.forEachIndexed{i,(label,pkg,subtitle)->
-   val view=tile(label){launchPackage(pkg)}
+  val dock=mutableListOf<DockItem>()
+  for((label,pkg,subtitle) in listOf(Triple("YouTube","com.google.android.youtube.tv","Watch videos together"),Triple("Plex","com.plexapp.android","Movies & TV shows"),Triple("Photos","com.synology.projectkailash","Open Synology Photos")))
+   dock.add(DockItem(label,subtitle,AppIcons.load(this,pkg) ?: HomeNavIcon("Apps").apply{setTint(titleColor)}){launchPackage(pkg)})
+  // Inputs the owner pinned in TV & inputs follow the apps; a missing input is simply left out.
+  val inputs=passthroughInputs()
+  for(slot in 0 until HomeShortcuts.SLOTS){
+   val input=inputs.firstOrNull{it.first==AppPreferences.shortcutInput(this,slot)} ?: continue
+   dock.add(DockItem(AppPreferences.shortcutName(this,slot),input.second,HomeNavIcon("Game").apply{setTint(titleColor)}){safeStart(input.third)})
+  }
+  dock.forEachIndexed{i,item->
+   val view=tile(item.label){item.action()}
    view.background=states(dockBackground(true),dockBackground(false))
-   focusViews["footer:$i"]=view;place(view,244+i*555,HomeLayout.DOCK_Y,534,HomeLayout.DOCK_H)
-   val icon=AppIcons.load(this,pkg) ?: HomeNavIcon("Apps").apply{setTint(titleColor)}
-   val longest=maxOf(icon.intrinsicWidth,icon.intrinsicHeight,1);icon.setBounds(0,0,p((64f*icon.intrinsicWidth.coerceAtLeast(1)/longest).toInt()),p((64f*icon.intrinsicHeight.coerceAtLeast(1)/longest).toInt()))
-   view.setPadding(p(18),p(8),p(12),p(8));view.compoundDrawablePadding=p(20);val chevron=ActionChevron().apply{setTint(titleColor);setBounds(0,0,p(24),p(30))};view.setCompoundDrawables(icon,null,chevron,null)
-   view.text=android.text.SpannableString("$label\n$subtitle").apply{
-    setSpan(android.text.style.StyleSpan(Typeface.BOLD),0,label.length,0)
-    setSpan(android.text.style.RelativeSizeSpan(.76f),label.length+1,length,0)
+   focusViews["footer:$i"]=view;place(view,HomeShortcuts.tileX(i,dock.size),HomeLayout.DOCK_Y,HomeShortcuts.tileWidth(dock.size),HomeLayout.DOCK_H)
+   val icon=item.icon;val edge=if(dock.size>4)52f else 64f
+   val longest=maxOf(icon.intrinsicWidth,icon.intrinsicHeight,1);icon.setBounds(0,0,p((edge*icon.intrinsicWidth.coerceAtLeast(1)/longest).toInt()),p((edge*icon.intrinsicHeight.coerceAtLeast(1)/longest).toInt()))
+   view.setPadding(p(18),p(8),p(12),p(8));view.compoundDrawablePadding=p(if(dock.size>4)14 else 20);val chevron=ActionChevron().apply{setTint(titleColor);setBounds(0,0,p(24),p(30))};view.setCompoundDrawables(icon,null,chevron,null)
+   // Five tiles leave room for the name only.
+   view.text=if(dock.size>4)android.text.SpannableString(item.label).apply{setSpan(android.text.style.StyleSpan(Typeface.BOLD),0,length,0)} else android.text.SpannableString("${item.label}\n${item.subtitle}").apply{
+    setSpan(android.text.style.StyleSpan(Typeface.BOLD),0,item.label.length,0)
+    setSpan(android.text.style.RelativeSizeSpan(.76f),item.label.length+1,length,0)
    }
+   view.contentDescription=item.label+", "+item.subtitle
    view.setTextSize(TypedValue.COMPLEX_UNIT_PX,26*scale);view.maxLines=2;view.ellipsize=android.text.TextUtils.TruncateAt.END
   }
   wireFocus();loadWatchNext()
  }
+ private class DockItem(val label:String,val subtitle:String,val icon:android.graphics.drawable.Drawable,val action:()->Unit)
+ /** The TV's own external inputs as (id, label, intent that switches to it). Empty when the TV has none. */
+ private fun passthroughInputs():List<Triple<String,String,Intent>> = if(Build.VERSION.SDK_INT<24)emptyList() else try {
+  val manager=getSystemService(android.content.Context.TV_INPUT_SERVICE) as android.media.tv.TvInputManager
+  manager.tvInputList.filter{it.isPassthroughInput}.mapNotNull{input->
+   val intent=Intent(Intent.ACTION_VIEW,android.media.tv.TvContract.buildChannelUriForPassthroughInput(input.id))
+   if(intent.resolveActivity(packageManager)==null)null else Triple(input.id,input.loadLabel(this)?.toString()?.takeIf{it.isNotBlank()} ?: "TV input",intent)
+  }.sortedBy{it.second}
+ }catch(_:Exception){emptyList()}
  private var photoSelectionKey=""
  private var selectedPhotoIds=emptyList<String?>()
  private var photoBoundEpoch=-1
@@ -541,7 +563,7 @@ class HomeActivity:Activity() {
   if(files.isEmpty()) place(text(if(favs)"Open a photo to add it to your favourites." else "No cached photos yet. Open connection settings.",28),244,340,1450,90)
   val cards=files.drop(galleryIndex*8).take(8).mapIndexed{i,file->
    val card=ClippedPhotoCard(this,14*scale).apply{id=nextId++;isFocusable=true;isFocusableInTouchMode=true;isClickable=true;contentDescription="View photo ${galleryIndex*8+i+1} of ${files.size}";foreground=ring()}
-   val image=OrientationPhotoView(this);card.addView(image,FrameLayout.LayoutParams(-1,-1))
+   val image=OrientationPhotoView(this,enlarge=true);card.addView(image,FrameLayout.LayoutParams(-1,-1))
    card.setOnClickListener{openPhoto(file)}
    bindGalleryPhoto(image,file);place(card,244+(i%4)*416,316+(i/4)*300,396,280);card
   }
@@ -846,10 +868,10 @@ class HomeActivity:Activity() {
    .setPositiveButton("Restore"){_,_->HomeDismissals.restore(this);showPage("Home")}.setNegativeButton("Cancel",null).show()
  }
  private fun wireFocus(){
-  val media=focusViews.keys.count{it.startsWith("media:")}
-  for(node in HomeFocusPolicy.nodes(media)){
+  val media=focusViews.keys.count{it.startsWith("media:")};val footers=focusViews.keys.count{it.startsWith("footer:")}.coerceAtLeast(3)
+  for(node in HomeFocusPolicy.nodes(media,footers)){
    val view=focusViews[node.key] ?: continue
-   fun id(direction:String)=focusViews[HomeFocusPolicy.target(node,direction,media).key]?.id ?: view.id
+   fun id(direction:String)=focusViews[HomeFocusPolicy.target(node,direction,media,footers).key]?.id ?: view.id
    view.nextFocusLeftId=id("left");view.nextFocusRightId=id("right");view.nextFocusUpId=id("up");view.nextFocusDownId=id("down")
   }
  }

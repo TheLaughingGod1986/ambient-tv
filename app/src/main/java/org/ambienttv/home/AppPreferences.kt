@@ -9,6 +9,9 @@ internal object AppPreferences {
  fun saved(c:Context,key:String)=prefs(c).getString(key,"").orEmpty()
  fun person(c:Context)=saved(c,"person")
  fun savePerson(c:Context,name:String){require(name.isNotBlank());prefs(c).edit().putString("person",name.trim()).commit()}
+ fun shortcutInput(c:Context,slot:Int)=saved(c,"shortcutInput$slot")
+ fun shortcutName(c:Context,slot:Int)=HomeShortcuts.name(saved(c,"shortcutName$slot"))
+ fun saveShortcut(c:Context,slot:Int,input:String,name:String){require(slot in 0 until HomeShortcuts.SLOTS && name in HomeShortcuts.NAMES);prefs(c).edit().putString("shortcutInput$slot",input).putString("shortcutName$slot",name).commit()}
  /** Blank, or the YYYY-MM-DD day before which this person's photos are ignored. */
  fun earliestPhotoDay(c:Context)=saved(c,"earliestPhotoDay")
  fun saveEarliestPhotoDay(c:Context,text:String){PhotoDatePolicy.parse(text);prefs(c).edit().putString("earliestPhotoDay",text.trim()).commit()}

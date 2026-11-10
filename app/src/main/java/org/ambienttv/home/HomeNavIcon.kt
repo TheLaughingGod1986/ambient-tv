@@ -8,6 +8,7 @@ internal class HomeNavIcon(private val name:String):Drawable(){
   when(name){
    "Home"->{p.style=Paint.Style.FILL;val q=Path();q.moveTo(2f,11f);q.lineTo(12f,2f);q.lineTo(22f,11f);q.lineTo(19f,11f);q.lineTo(19f,21f);q.lineTo(14f,21f);q.lineTo(14f,14f);q.lineTo(10f,14f);q.lineTo(10f,21f);q.lineTo(5f,21f);q.lineTo(5f,11f);q.close();c.drawPath(q,p)}
    "TV"->{c.drawRect(2f,4f,22f,17f,p);path(8f,21f,16f,21f);path(12f,17f,12f,21f)}
+   "Game"->{c.drawRoundRect(2f,7f,22f,18f,5f,5f,p);path(6f,12.5f,10f,12.5f);path(8f,10.5f,8f,14.5f);c.drawCircle(15.5f,13.8f,.9f,p);c.drawCircle(18f,11.4f,.9f,p)}
    "Movies"->{c.drawRect(3f,3f,21f,21f,p);path(8f,3f,8f,21f);path(16f,3f,16f,21f);for(y in listOf(8f,16f)){path(3f,y,8f,y);path(16f,y,21f,y)}}
    "Anime"->{val q=Path();q.moveTo(12f,2f);q.lineTo(14.6f,9.4f);q.lineTo(22f,12f);q.lineTo(14.6f,14.6f);q.lineTo(12f,22f);q.lineTo(9.4f,14.6f);q.lineTo(2f,12f);q.lineTo(9.4f,9.4f);q.close();c.drawPath(q,p)}
    "Apps"->for(x in listOf(3f,14f))for(y in listOf(3f,14f))c.drawRect(x,y,x+7,y+7,p)
