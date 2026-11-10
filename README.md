@@ -35,6 +35,11 @@ photo upload or API key is required. Your existing services may have their own t
 views on an emulator. They contain no personal photos or account history. Weather
 and media accounts are not connected. They are not photographs of a household TV.*
 
+## New in 0.2.5
+
+- Pin up to two TV inputs, such as a games console, beside the app shortcuts on Home. Choose the input and a name in Settings → TV & inputs; each press steps to the next choice, so nothing is typed. Selecting the tile switches the TV to that input.
+- Photo thumbnails on the Photos page fill more of their tiles.
+
 ## New in 0.2.4
 
 - The fill beside Plex posters and photos is now a smooth blur instead of coarse blocks.

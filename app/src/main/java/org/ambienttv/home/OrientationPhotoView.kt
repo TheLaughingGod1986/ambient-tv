@@ -22,7 +22,7 @@ internal class ClippedPhotoCard(c:Context,private val radius:Float):FrameLayout(
  * The bitmaps belong to [PhotoThumbs] / [ArtThumbs] and may be on screen in more than one
  * place, so this view only lets go of them and never recycles one.
  */
-internal class OrientationPhotoView(c:Context,private val homePolish:Boolean=false):View(c) {
+internal class OrientationPhotoView(c:Context,private val homePolish:Boolean=false,private val enlarge:Boolean=false):View(c) {
  private val paint=Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
  private var face:FaceRegion?=null
  private val warmth=ColorMatrixColorFilter(ColorMatrix().apply{setSaturation(1.04f);postConcat(ColorMatrix(floatArrayOf(1.025f,0f,0f,0f,2f,0f,1.01f,0f,0f,1f,0f,0f,.995f,0f,0f,0f,0f,0f,1f,0f)))})
@@ -47,7 +47,8 @@ internal class OrientationPhotoView(c:Context,private val homePolish:Boolean=fal
    paint.alpha=if(homePolish)140 else 150;c.drawBitmap(blur,null,RectF((width-w)/2,(height-h)/2,(width+w)/2,(height+h)/2),paint);paint.alpha=255
    c.drawColor(Color.argb(if(homePolish)70 else 65,3,10,17))
   }
-  val frame=if(homePolish)HomePhotoPolicy.featureFrame(image.width,image.height,width.coerceAtLeast(1),height.coerceAtLeast(1),face)else HomePhotoPolicy.frame(image.width,image.height,width.coerceAtLeast(1),height.coerceAtLeast(1))
+  // Home tiles and gallery thumbnails are enlarged towards filling the frame; posters always stay whole.
+  val frame=if(homePolish || enlarge)HomePhotoPolicy.featureFrame(image.width,image.height,width.coerceAtLeast(1),height.coerceAtLeast(1),face)else HomePhotoPolicy.frame(image.width,image.height,width.coerceAtLeast(1),height.coerceAtLeast(1))
   paint.colorFilter=if(homePolish)warmth else null
   c.drawBitmap(image,null,RectF(frame.left,frame.top,frame.left+frame.width,frame.top+frame.height),paint);paint.colorFilter=null
  }

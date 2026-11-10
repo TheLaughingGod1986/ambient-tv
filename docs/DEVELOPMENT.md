@@ -154,6 +154,16 @@ latency or establish NAS availability. On API errors 102/104, Synology requests
 advertised API routing/version information and retries only a validated webapi
 CGI path. Person-membership validation and cached fallback remain required.
 
+## Input shortcuts on Home
+
+`HomeShortcuts` lets the owner pin up to two of the TV's own passthrough inputs
+after the three app shortcuts. The TV & inputs page offers two controls per
+shortcut that step through the available inputs (and off) and a short list of
+names; only that choice is stored. A tile opens the same passthrough-input intent
+as the TV & inputs page. The launcher cannot see what a console is running, so a
+tile shows a name and the input label only, never game titles or progress.
+`HomeFocusPolicy` takes the number of quick-access tiles; three keeps the original map.
+
 ## Home tile framing and captions
 
 `HomePhotoPolicy.featureFrame` enlarges a picture to fill its Home tile only when
