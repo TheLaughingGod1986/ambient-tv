@@ -9,6 +9,9 @@ internal object AppPreferences {
  fun saved(c:Context,key:String)=prefs(c).getString(key,"").orEmpty()
  fun person(c:Context)=saved(c,"person")
  fun savePerson(c:Context,name:String){require(name.isNotBlank());prefs(c).edit().putString("person",name.trim()).commit()}
+ /** Blank, or the YYYY-MM-DD day before which this person's photos are ignored. */
+ fun earliestPhotoDay(c:Context)=saved(c,"earliestPhotoDay")
+ fun saveEarliestPhotoDay(c:Context,text:String){PhotoDatePolicy.parse(text);prefs(c).edit().putString("earliestPhotoDay",text.trim()).commit()}
  fun demo(c:Context)=prefs(c).getBoolean("demo",true)
  fun setDemo(c:Context,enabled:Boolean){prefs(c).edit().putBoolean("demo",enabled).commit()}
  fun weatherEnabled(c:Context)=prefs(c).getBoolean("weatherEnabled",false)

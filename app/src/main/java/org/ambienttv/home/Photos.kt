@@ -43,7 +43,9 @@ object Photos {
     val person = api.personId(AppPreferences.person(c))
     stage = "recent photos and older memories"
     val excluded=state.getStringSet("excludedPhotoIds",emptySet()) ?: emptySet()
-    val catalog=api.photoCatalog(person).filter{it.getInt("id").toString() !in excluded}
+    val earliest=try{PhotoDatePolicy.parse(AppPreferences.earliestPhotoDay(c))}catch(_:IllegalArgumentException){null}
+    val catalog=api.photoCatalog(person).filter{it.getInt("id").toString() !in excluded && PhotoDatePolicy.keep(it.getLong("time"),earliest)}
+    if(catalog.isEmpty() && earliest!=null)throw SafeFailure("No photos of this person on or after the earliest date; previous photos kept")
     require(catalog.isNotEmpty())
     val recent = catalog.take(PhotoPoolPolicy.LIMIT)
     val older=catalog.asReversed().filter{item->recent.take(PhotoMixPolicy.RECENT).none{it.getInt("id")==item.getInt("id")}}

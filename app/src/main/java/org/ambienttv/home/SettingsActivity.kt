@@ -113,6 +113,14 @@ class SettingsActivity : Activity() {
   syncDetails=label(PhotoSync.summary(this),18f)
   val nasZone=field("NAS timezone",PhotoSync.zone(this).id)
   button("Save NAS refresh timezone"){try{PhotoSync.setZone(this,nasZone.text.toString().trim());syncDetails.text=PhotoSync.summary(this)}catch(_:IllegalArgumentException){status.text="Enter an IANA timezone, such as Europe/London or UTC."}}
+  val earliestDay=field("Only show photos taken on or after (YYYY-MM-DD)",AppPreferences.earliestPhotoDay(this))
+  label("Optional. Leave blank to use every photo of this person. A date such as a child's birthday keeps out older pictures that the NAS has filed under the same name.",18f)
+  button("Save earliest date and refresh photos") {
+   try { AppPreferences.saveEarliestPhotoDay(this,earliestDay.text.toString()) } catch(_:IllegalArgumentException) { status.text="Enter the date as YYYY-MM-DD, such as 2024-01-31, or leave it blank."; return@button }
+   getSharedPreferences("home-daily",0).edit().putLong("row-day",Long.MIN_VALUE).apply()
+   status.text="Saved. Refreshing photos…"
+   Photos.refresh(applicationContext,true) { message -> runOnUiThread { status.text=message;if(::syncDetails.isInitialized)syncDetails.text=PhotoSync.summary(this) } }
+  }
   button("Refresh photos") { getSharedPreferences("home-daily",0).edit().putLong("row-day",Long.MIN_VALUE).apply(); Photos.refresh(applicationContext,true) { message -> runOnUiThread { status.text=message;if(::syncDetails.isInitialized)syncDetails.text=PhotoSync.summary(this) } } }
   button("Disconnect and erase this app’s cached photos") {
    if(!signIn.isEnabled) { status.text="Wait for sign-in to finish."; return@button }
