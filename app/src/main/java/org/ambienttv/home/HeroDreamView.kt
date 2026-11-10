@@ -18,6 +18,7 @@ interface SaverDisplay {
 }
 /** Reference-inspired single hero. Original photo is composed around its detected face without distortion. */
 internal class HeroDreamView(c:Context,private val previewPanel:WeatherPanel?=null):View(c),SaverDisplay {
+ private companion object { const val HEADER_LEFT=980f } // the panel's left edge, shared with the preview strip
  private var dimMinute=-1L;private var dimmed=false
  /** Evening dimming is drawn over the finished frame, so every layout gets it the same way. */
  override fun draw(canvas:Canvas){
@@ -34,6 +35,7 @@ internal class HeroDreamView(c:Context,private val previewPanel:WeatherPanel?=nu
  private val clip=Path()
  private val thumbImageRects=Array(3){RectF()}
  private val scrim=Paint().apply {shader=LinearGradient(900f,0f,1920f,0f,intArrayOf(Color.TRANSPARENT,Color.argb(170,2,9,16)),null,Shader.TileMode.CLAMP)}
+ private val topScrim=Paint().apply {shader=LinearGradient(0f,0f,0f,330f,intArrayOf(Color.argb(110,2,9,16),Color.TRANSPARENT),null,Shader.TileMode.CLAMP)}
  private val bottomScrim=Paint().apply {shader=LinearGradient(0f,670f,0f,1080f,intArrayOf(Color.TRANSPARENT,Color.argb(120,2,9,16)),null,Shader.TileMode.CLAMP)}
  private var current:Bitmap?=null
  private var previous:Bitmap?=null
@@ -118,18 +120,25 @@ internal class HeroDreamView(c:Context,private val previewPanel:WeatherPanel?=nu
   drawLayer(previous,oldSoft,previousRect,oldEdge,255)
   drawLayer(current,soft,currentRect,edge,if(previous==null)255 else (fraction*255).toInt())
   paint.alpha=255;canvas.drawRect(0f,0f,1920f,1080f,scrim);canvas.drawRect(0f,0f,1920f,1080f,bottomScrim)
-  paint.typeface=normal;paint.color=Color.WHITE;paint.textAlign=Paint.Align.RIGHT;paint.textSize=154f;canvas.drawText(timeText,1860f,278f,paint)
-  paint.textSize=48f;canvas.drawText(dateText,1860f,352f,paint)
+  // Header row across the right-hand panel, as on Home: weather at its left edge, clock at its right.
+  canvas.drawRect(880f,0f,1920f,330f,topScrim)
+  paint.setShadowLayer(10f,0f,2f,Color.argb(150,0,0,0))
+  paint.typeface=normal;paint.color=Color.WHITE;paint.textAlign=Paint.Align.RIGHT;paint.textSize=112f;canvas.drawText(timeText,1860f,172f,paint)
+  paint.textSize=40f;canvas.drawText(dateText,1860f,228f,paint)
+  paint.textAlign=Paint.Align.LEFT
   if(AppPreferences.weatherEnabled(context)){
-  WeatherRenderer.drawConditionIcon(canvas,panel,1515f,438f,.50f,paint)
-  paint.typeface=normal;paint.textAlign=Paint.Align.LEFT;paint.color=Color.WHITE;paint.textSize=50f;canvas.drawText(panel.temperature,1590f,456f,paint)
-  paint.textSize=22f;canvas.drawText(AppPreferences.weatherLabel(context),1590f,500f,paint)
-  val condition=android.text.TextUtils.ellipsize(panel.condition,android.text.TextPaint(paint),270f,android.text.TextUtils.TruncateAt.END).toString()
-  canvas.drawText(condition,1590f,534f,paint)
-  val range=panel.range
-  if(range!=null){paint.textSize=20f;paint.color=Color.rgb(222,231,240);canvas.drawText(android.text.TextUtils.ellipsize(range,android.text.TextPaint(paint),370f,android.text.TextUtils.TruncateAt.END).toString(),1490f,574f,paint)}
-  paint.textSize=12f;paint.color=Color.rgb(210,222,231);canvas.drawText("open-meteo.com · CC BY 4.0",1490f,if(range!=null)606f else 574f,paint)
+   paint.textSize=22f;canvas.drawText(AppPreferences.weatherLabel(context).uppercase(),HEADER_LEFT,92f,paint)
+   paint.textSize=76f;canvas.drawText(panel.temperature,HEADER_LEFT-4f,172f,paint)
+   val iconX=HEADER_LEFT+paint.measureText(panel.temperature)+62f
+   paint.clearShadowLayer();WeatherRenderer.drawConditionIcon(canvas,panel,iconX,146f,.52f,paint);paint.setShadowLayer(10f,0f,2f,Color.argb(150,0,0,0))
+   paint.typeface=normal;paint.textAlign=Paint.Align.LEFT;paint.color=Color.WHITE;paint.textSize=32f
+   val room=(1500f-(iconX+64f)).coerceAtLeast(120f)
+   canvas.drawText(android.text.TextUtils.ellipsize(panel.condition,android.text.TextPaint(paint),room,android.text.TextUtils.TruncateAt.END).toString(),iconX+64f,160f,paint)
+   val range=panel.range
+   if(range!=null){paint.textSize=24f;paint.color=Color.rgb(222,231,240);canvas.drawText(android.text.TextUtils.ellipsize(range,android.text.TextPaint(paint),520f,android.text.TextUtils.TruncateAt.END).toString(),HEADER_LEFT,222f,paint)}
+   paint.textSize=12f;paint.color=Color.rgb(210,222,231);canvas.drawText("open-meteo.com · CC BY 4.0",HEADER_LEFT,if(range!=null)250f else 216f,paint)
   }
+  paint.clearShadowLayer()
   paint.textAlign=Paint.Align.LEFT
   // The photo's own caption: when it was taken and, with a birthday saved, the age then. Nothing when unknown.
   caption?.let{(whenTaken,age)->
