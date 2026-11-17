@@ -64,7 +64,10 @@ class DemoScreenshots:Instrumentation() {
     val fields=mutableListOf<android.widget.EditText>()
     fun collect(v:View){if(v is android.widget.EditText)fields.add(v);if(v is android.view.ViewGroup)for(i in 0 until v.childCount)collect(v.getChildAt(i))}
     collect(settings.window.decorView)
-    check(fields.size==8 && fields.all{it.text.isEmpty()}){"Setup must not contain an address, name or account default"}
+    // Eleven boxes. The NAS timezone starts as the TV's own zone, which is not an address, name or account;
+    // every other box must start empty.
+    val zone=fields.filter{it.contentDescription=="NAS timezone"}
+    check(fields.size==11 && zone.size==1 && zone[0].text.toString()==PhotoSync.zone(c).id && (fields-zone.toSet()).all{it.text.isEmpty()}){"Setup must not contain an address, name or account default"}
     check(settings.window.attributes.flags and android.view.WindowManager.LayoutParams.FLAG_SECURE != 0)
     report.put("setupFieldsBlank",true).put("setupScreenProtected",true);settings.finish()
    }
