@@ -21,6 +21,10 @@ internal class SkyMotionView(c:Context):View(c) {
  private var lastFrame=0L
  private var clock=0.0
  private var frameMs=66L
+ private var lastActivity=0L
+ private var windDrift=1f
+ private var slant=.17f
+ private var snowWind=6f
 
  private class Drift(var x:Float,val y:Float,val speed:Float,val scale:Float,val alpha:Float,val sprite:Int){var width=600f}
  private val target=RectF()
@@ -54,8 +58,13 @@ internal class SkyMotionView(c:Context):View(c) {
  }
 
  fun show(next:SkyScene,nextLook:SkyLook,nextSprites:List<Bitmap>){
-  val changed=scene?.weather!=next.weather || scene?.night!=next.night
+  val previous=scene
+  val changed=previous==null || previous.weather!=next.weather || previous.night!=next.night ||
+   SkyPolicy.clouds(previous.weather,previous.night,previous.detail.cloudCover)!=SkyPolicy.clouds(next.weather,next.night,next.detail.cloudCover) ||
+   SkyPolicy.particles(previous.weather,previous.detail.precipitationMm)!=SkyPolicy.particles(next.weather,next.detail.precipitationMm)
   scene=next;look=nextLook;sprites=nextSprites
+  // Wind sets which way and how fast the clouds go, and how steeply the rain falls.
+  val across=next.detail.across;windDrift=SkyPolicy.drift(across);slant=SkyPolicy.slant(across);snowWind=across?.let{(it*.9).toFloat()} ?: 6f
   frameMs=1000L/SkyPolicy.frameRate(next.weather,next.night)
   val rain=SkyColor.mix(nextLook.skyHorizon,Color.WHITE,.55)
   rainFar.color=(rain and 0xffffff) or ((if(next.night)60 else 80) shl 24)
@@ -71,9 +80,9 @@ internal class SkyMotionView(c:Context):View(c) {
  private fun reset(s:SkyScene,l:SkyLook){
   drifts.clear()
   val fog=s.weather==SkyWeather.FOG;val grey=s.weather.rain || s.weather==SkyWeather.OVERCAST || s.weather==SkyWeather.SNOW
-  val n=when{s.weather==SkyWeather.CLEAR->if(s.night)1 else 2;s.weather==SkyWeather.PARTLY_CLOUDY->4;fog->4;else->5}
+  val n=SkyPolicy.clouds(s.weather,s.night,s.detail.cloudCover)
   // Spread the clouds evenly across the sky at the start, each with its own height, size and pace.
-  val spacing=(SkyRenderer.WIDTH+600f)/n
+  val spacing=(SkyRenderer.WIDTH+600f)/max(1,n)
   repeat(n){i->
    val y=when{fog->160f+random.nextFloat()*60f;grey->40f+random.nextFloat()*110f;s.weather==SkyWeather.CLEAR->70f+random.nextFloat()*70f;else->60f+random.nextFloat()*100f}
    val alpha=when{fog->.7f;s.weather==SkyWeather.CLEAR->if(s.night).3f else .6f;s.weather==SkyWeather.PARTLY_CLOUDY->.95f;else->.55f+random.nextFloat()*.3f}
@@ -81,7 +90,7 @@ internal class SkyMotionView(c:Context):View(c) {
    // Higher clouds drift a little faster, which reads as depth.
    drifts.add(Drift(i*spacing-500f+random.nextFloat()*spacing*.5f,y,(if(fog)5f else 4f)+(180f-y).coerceAtLeast(0f)/30f+random.nextFloat()*3f,scale,alpha,i))
   }
-  count=SkyPolicy.particles(s.weather)
+  count=SkyPolicy.particles(s.weather,s.detail.precipitationMm)
   px=FloatArray(count){random.nextFloat()*(SkyRenderer.WIDTH+200f)-100f}
   py=FloatArray(count){random.nextFloat()*SkyRenderer.VISIBLE}
   val snow=s.weather==SkyWeather.SNOW
@@ -101,13 +110,14 @@ internal class SkyMotionView(c:Context):View(c) {
  /** Starts or stops redrawing. Stopped, the view keeps its last frame and costs nothing. */
  fun setRunning(value:Boolean){
   if(running==value)return
-  running=value;lastFrame=0L;removeCallbacks(resume);removeCallbacks(nextFrame)
+  running=value;lastFrame=0L;removeCallbacks(resume);removeCallbacks(nextFrame);lastActivity=SystemClock.uptimeMillis()
   if(value)invalidate()
  }
- /** Freezes motion briefly after a remote press; the next press extends it. */
+ /** Freezes motion briefly after a remote press; the next press extends it. A press also wakes a resting sky. */
  fun yieldToRemote(){
   if(!running)return
-  quietUntil=SystemClock.uptimeMillis()+700L
+  lastActivity=SystemClock.uptimeMillis()
+  quietUntil=lastActivity+700L
   removeCallbacks(resume);postDelayed(resume,720L)
  }
 
@@ -116,13 +126,17 @@ internal class SkyMotionView(c:Context):View(c) {
  private fun step(dt:Float,now:Long){
   val s=scene ?: return
   clock+=dt
-  // A cloud that has left on the right comes back fully off-screen on the left, so nothing pops into view.
-  for(d in drifts){d.x+=d.speed*dt;if(d.x>SkyRenderer.WIDTH+20f)d.x=-d.width-random.nextFloat()*240f}
+  // A cloud that has left on one side comes back fully off-screen on the other, so nothing pops into view.
+  for(d in drifts){
+   d.x+=d.speed*windDrift*dt
+   if(windDrift>0 && d.x>SkyRenderer.WIDTH+20f)d.x=-d.width-random.nextFloat()*240f
+   if(windDrift<0 && d.x+d.width< -20f)d.x=SkyRenderer.WIDTH+random.nextFloat()*240f
+  }
   val snow=s.weather==SkyWeather.SNOW
   for(i in 0 until count){
-   if(snow){py[i]+=speed[i]*dt;px[i]+=(sin(clock*.8+phase[i]).toFloat()*14f+6f)*dt}
-   else{py[i]+=speed[i]*dt;px[i]+=speed[i]*.17f*dt}
-   if(py[i]>SkyRenderer.VISIBLE+20f || px[i]>SkyRenderer.WIDTH+60f){py[i]=-random.nextFloat()*80f-size[i];px[i]=random.nextFloat()*(SkyRenderer.WIDTH+200f)-160f}
+   if(snow){py[i]+=speed[i]*dt;px[i]+=(sin(clock*.8+phase[i]).toFloat()*14f+snowWind)*dt}
+   else{py[i]+=speed[i]*dt;px[i]+=speed[i]*slant*dt}
+   if(py[i]>SkyRenderer.VISIBLE+20f || px[i]>SkyRenderer.WIDTH+120f || px[i]< -120f){py[i]=-random.nextFloat()*80f-size[i];px[i]=random.nextFloat()*(SkyRenderer.WIDTH+400f)-200f}
   }
   if(nextLightning>0 && now>=nextLightning){lightningAt=now;nextLightning=now+SkyPolicy.nextLightningMs(random)}
   if(nextBirds>0 && now>=nextBirds && birdsAt<0){birdsAt=now;birdY=105f+random.nextFloat()*45f;nextBirds=now+150_000L+random.nextInt(90_000)}
@@ -133,7 +147,9 @@ internal class SkyMotionView(c:Context):View(c) {
   val s=scene ?: return;val l=look ?: return
   val now=SystemClock.uptimeMillis()
   val quiet=now<quietUntil
-  if(running && !quiet){val dt=if(lastFrame==0L)0f else ((now-lastFrame).coerceIn(0L,100L))/1000f;step(dt,now)}
+  // Nobody has pressed a button for a while: hold the sky still until the next press.
+  val resting=SkyPolicy.resting(now,lastActivity)
+  if(running && !quiet && !resting){val dt=if(lastFrame==0L)0f else ((now-lastFrame).coerceIn(0L,100L))/1000f;step(dt,now)}
   lastFrame=now
   val unit=width/SkyRenderer.WIDTH
   canvas.save();canvas.scale(unit,unit)
@@ -171,7 +187,7 @@ internal class SkyMotionView(c:Context):View(c) {
   removeCallbacks(nextFrame)
   if(running){
    if(quiet){removeCallbacks(resume);postDelayed(resume,quietUntil-now+16)}
-   else postDelayed(nextFrame,frameMs)
+   else if(!resting)postDelayed(nextFrame,frameMs)
   }
  }
 
@@ -182,8 +198,8 @@ internal class SkyMotionView(c:Context):View(c) {
    val fade=((SkyRenderer.VISIBLE-y)/50f).coerceIn(0f,1f)
    if(fade<=0f)continue
    val tail=len*fade
-   if(i%3==0){near[n]=x;near[n+1]=y;near[n+2]=x-tail*.17f;near[n+3]=y-tail;n+=4}
-   else{far[f]=x;far[f+1]=y;far[f+2]=x-tail*.12f;far[f+3]=y-tail*.75f;f+=4}
+   if(i%3==0){near[n]=x;near[n+1]=y;near[n+2]=x-tail*slant;near[n+3]=y-tail;n+=4}
+   else{far[f]=x;far[f+1]=y;far[f+2]=x-tail*.75f*slant;far[f+3]=y-tail*.75f;f+=4}
   }
   c.drawLines(far,0,f,rainFar);c.drawLines(near,0,n,rainNear)
  }

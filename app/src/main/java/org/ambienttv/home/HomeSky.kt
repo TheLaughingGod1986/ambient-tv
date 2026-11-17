@@ -12,7 +12,21 @@ import java.util.concurrent.Executors
 internal enum class HomeSkyMode(val key:String,val label:String) {
  LIVING("living","Weather & time, moving"), STILL("still","Weather & time, still"), PHOTO("photo","Original sunrise picture");
  fun next()=values()[(ordinal+1)%values().size]
- companion object { fun of(key:String?)=values().firstOrNull{it.key==key} ?: LIVING }
+ companion object {
+  /** The sky for now: the weather place if one is saved (else the TV's time zone) and the latest fresh reading. */
+  fun currentScene(context:Context,now:Long):SkyScene {
+   val saved=AppPreferences.saved(context,"latitude").toDoubleOrNull()?.let{lat->AppPreferences.saved(context,"longitude").toDoubleOrNull()?.let{lon->lat to lon}}
+    ?.takeIf{(lat,lon)->lat in -90.0..90.0 && lon in -180.0..180.0}
+   val (lat,lon)=saved ?: SunPosition.fallback(TimeZone.getDefault(),now)
+   val reading=currentReading(context,now)
+   return SkyPolicy.scene(now,lat,lon,reading?.code,reading?.let{SkyDetail.of(it)} ?: SkyDetail())
+  }
+  /** The latest reading only while it is fresh; otherwise null, which draws a fair sky rather than a guess. */
+  private fun currentReading(context:Context,now:Long):WeatherData? {
+   if(!AppPreferences.weatherEnabled(context))return null
+   val data=WeatherStore.read(context) ?: return null
+   return data.takeIf{now-data.observedAt<=90*60*1000L && data.observedAt<=now+15*60*1000L}
+  } fun of(key:String?)=values().firstOrNull{it.key==key} ?: LIVING }
 }
 
 /**
@@ -63,14 +77,7 @@ internal class HomeSky(private val context:Context,private val preview:Boolean) 
  internal var motionForTest=false
  fun refresh(now:Long=System.currentTimeMillis()) {
   if(mode==HomeSkyMode.PHOTO || pinnedForTest)return
-  val scene=if(preview)SkyPolicy.scene(PREVIEW_TIME,51.5,-0.1,0) else {
-   val zone=TimeZone.getDefault()
-   val saved=AppPreferences.saved(context,"latitude").toDoubleOrNull()?.let{lat->AppPreferences.saved(context,"longitude").toDoubleOrNull()?.let{lon->lat to lon}}
-    ?.takeIf{(lat,lon)->lat in -90.0..90.0 && lon in -180.0..180.0}
-   val (lat,lon)=saved ?: SunPosition.fallback(zone,now)
-   SkyPolicy.scene(now,lat,lon,currentCode(now))
-  }
-  show(scene)
+  show(if(preview)SkyPolicy.scene(PREVIEW_TIME,51.5,-0.1,0) else currentScene(context,now))
  }
  /** Renders [scene] off the main thread unless it is already shown or on its way. Also used by the emulator gallery. */
  internal fun show(scene:SkyScene) {
@@ -96,12 +103,7 @@ internal class HomeSky(private val context:Context,private val preview:Boolean) 
    } catch(_:Throwable) { handler.post{if(pendingKey==scene.key)pendingKey=null} } // an out-of-memory render keeps the previous sky
   }
  }
- /** The latest reading only while it is fresh; otherwise null, which draws a fair sky rather than a guess. */
- private fun currentCode(now:Long):Int? {
-  if(!AppPreferences.weatherEnabled(context))return null
-  val data=WeatherStore.read(context) ?: return null
-  return data.code.takeIf{now-data.observedAt<=90*60*1000L && data.observedAt<=now+15*60*1000L}
- }
+
  /** Motion runs only for the living mode, while Home is in front, and when Android allows animation. */
  fun setRunning(value:Boolean){
   wanted=value
@@ -113,6 +115,20 @@ internal class HomeSky(private val context:Context,private val preview:Boolean) 
  fun release(){motion?.setRunning(false);worker.shutdownNow();handler.removeCallbacksAndMessages(null)}
 
  companion object {
+  /** The sky for now: the weather place if one is saved (else the TV's time zone) and the latest fresh reading. */
+  fun currentScene(context:Context,now:Long):SkyScene {
+   val saved=AppPreferences.saved(context,"latitude").toDoubleOrNull()?.let{lat->AppPreferences.saved(context,"longitude").toDoubleOrNull()?.let{lon->lat to lon}}
+    ?.takeIf{(lat,lon)->lat in -90.0..90.0 && lon in -180.0..180.0}
+   val (lat,lon)=saved ?: SunPosition.fallback(TimeZone.getDefault(),now)
+   val reading=currentReading(context,now)
+   return SkyPolicy.scene(now,lat,lon,reading?.code,reading?.let{SkyDetail.of(it)} ?: SkyDetail())
+  }
+  /** The latest reading only while it is fresh; otherwise null, which draws a fair sky rather than a guess. */
+  private fun currentReading(context:Context,now:Long):WeatherData? {
+   if(!AppPreferences.weatherEnabled(context))return null
+   val data=WeatherStore.read(context) ?: return null
+   return data.takeIf{now-data.observedAt<=90*60*1000L && data.observedAt<=now+15*60*1000L}
+  }
   /** Demo renders use one fixed golden-hour moment so documentation images are reproducible. */
   const val PREVIEW_TIME=1794930300000L
  }

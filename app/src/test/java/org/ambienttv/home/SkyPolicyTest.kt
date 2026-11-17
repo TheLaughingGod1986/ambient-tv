@@ -54,7 +54,11 @@ class SkyPolicyTest {
   assertEquals(5,clear.ridges.size)
  }
  @Test fun motionIsBounded(){
-  for(w in SkyWeather.values()){assertTrue(SkyPolicy.frameRate(w,false) in 10..30);assertTrue(SkyPolicy.frameRate(w,true) in 10..30);assertTrue(SkyPolicy.particles(w)<=210)}
+  for(w in SkyWeather.values()){
+   assertTrue(SkyPolicy.frameRate(w,false) in 10..30);assertTrue(SkyPolicy.frameRate(w,true) in 10..30)
+   for(mm in listOf(null,0.0,0.3,2.0,50.0))assertTrue(SkyPolicy.particles(w,mm)<=340)
+   for(cover in listOf(null,0,50,100))assertTrue(SkyPolicy.clouds(w,false,cover) in 0..6)
+  }
   val r=java.util.Random(1);repeat(100){assertTrue(SkyPolicy.nextLightningMs(r) in 18_000L..45_000L)}
  }
  @Test fun moonPhaseFollowsTheCalendar(){
@@ -70,5 +74,27 @@ class SkyPolicyTest {
   assertEquals(HomeSkyMode.LIVING,HomeSkyMode.of(null));assertEquals(HomeSkyMode.LIVING,HomeSkyMode.of("unknown"))
   assertEquals(HomeSkyMode.STILL,HomeSkyMode.LIVING.next());assertEquals(HomeSkyMode.PHOTO,HomeSkyMode.STILL.next());assertEquals(HomeSkyMode.LIVING,HomeSkyMode.PHOTO.next())
   for(m in HomeSkyMode.values())assertEquals(m,HomeSkyMode.of(m.key))
+ }
+ @Test fun windSetsTheDirectionAndSpeedOfTheSky(){
+  // Sunrise is on the left of the strip, so a west wind (from 270°) carries clouds and rain to the left.
+  assertTrue(SkyDetail(30.0,270.0).across!! < -29);assertTrue(SkyDetail(30.0,90.0).across!! > 29);assertEquals(0.0,SkyDetail(30.0,0.0).across!!,1e-9)
+  assertNull(SkyDetail().across);assertNull(SkyDetail(10.0,null).across)
+  assertEquals(1f,SkyPolicy.drift(null),0f);assertEquals(.5f,SkyPolicy.drift(1.0),0f)
+  assertTrue(SkyPolicy.drift(-30.0)< -2f);assertTrue(SkyPolicy.drift(30.0)>2f);assertTrue(SkyPolicy.drift(500.0)<=3f)
+  assertEquals(.17f,SkyPolicy.slant(null),0f);assertTrue(SkyPolicy.slant(-40.0)<0f);assertTrue(SkyPolicy.slant(400.0)<=.5f)
+ }
+ @Test fun coverAndRainfallShapeTheWeather(){
+  assertEquals(0,SkyPolicy.clouds(SkyWeather.CLEAR,false,0));assertEquals(2,SkyPolicy.clouds(SkyWeather.CLEAR,false,null))
+  assertEquals(2,SkyPolicy.clouds(SkyWeather.PARTLY_CLOUDY,false,10));assertEquals(6,SkyPolicy.clouds(SkyWeather.PARTLY_CLOUDY,false,90))
+  assertTrue(SkyPolicy.particles(SkyWeather.RAIN,0.0)<SkyPolicy.particles(SkyWeather.RAIN,null))
+  assertTrue(SkyPolicy.particles(SkyWeather.RAIN,3.0)>SkyPolicy.particles(SkyWeather.RAIN,null))
+  assertEquals(0,SkyPolicy.particles(SkyWeather.CLEAR,5.0))
+  // Live detail changes the scene key, so the moving layer picks it up; without a reading it is ignored.
+  val base=SkyPolicy.scene(nov(13),lat,lon,63)
+  assertNotEquals(base.key,SkyPolicy.scene(nov(13),lat,lon,63,SkyDetail(40.0,270.0,100,2.0)).key)
+  assertEquals(SkyDetail(),SkyPolicy.scene(nov(13),lat,lon,null,SkyDetail(40.0,270.0,100,2.0)).detail)
+ }
+ @Test fun theSkyRestsAfterTenQuietMinutes(){
+  assertFalse(SkyPolicy.resting(1_000_000L,1_000_000L-9*60_000L));assertTrue(SkyPolicy.resting(1_000_000L,1_000_000L-10*60_000L))
  }
 }

@@ -50,6 +50,13 @@ internal class HeroDreamView(c:Context,private val previewPanel:WeatherPanel?=nu
  private var changedAt=0L
  private var minute=-1L
  private var panel=previewPanel ?: WeatherStore.panel(c)
+ private var sky:Bitmap?=null
+ private var skyKey:String?=null
+ private var skyPending:String?=null
+ private var skyWorker:java.util.concurrent.ExecutorService?=null
+ private val skyRect=RectF(0f,0f,1920f,380f)
+ private val mainHandler=android.os.Handler(android.os.Looper.getMainLooper())
+ internal val skyReadyForTest get()=sky!=null
  private val timeFormat=SimpleDateFormat("HH:mm",Locale.getDefault()).apply {timeZone=TimeZone.getDefault()}
  private val dateFormat=SimpleDateFormat("EEE, d MMM",Locale.getDefault()).apply {timeZone=TimeZone.getDefault()}
  private var timeText=timeFormat.format(Date())
@@ -61,7 +68,23 @@ internal class HeroDreamView(c:Context,private val previewPanel:WeatherPanel?=nu
   motionEnabled=try {MutedPalette.motionAllowed(android.provider.Settings.Global.getFloat(context.contentResolver,android.provider.Settings.Global.ANIMATOR_DURATION_SCALE,1f),(context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager).isPowerSaveMode)}catch(_:Exception){false}
   if(motionEnabled)post(tick)
  }
- override fun updateHeader(){val now=System.currentTimeMillis()/60000;if(now!=minute){minute=now;timeText=timeFormat.format(Date());dateText=dateFormat.format(Date());panel=previewPanel ?: WeatherStore.panel(context);invalidate()}}
+ override fun updateHeader(){val now=System.currentTimeMillis()/60000;if(now!=minute){minute=now;timeText=timeFormat.format(Date());dateText=dateFormat.format(Date());panel=previewPanel ?: WeatherStore.panel(context);refreshSky();invalidate()}}
+ /**
+  * Home's sky at the top of the margins beside a photo. It stays still (a screensaver is watched, not used) and is
+  * redrawn on a low-priority thread only when the scene changes. Off with the original picture, and in demo renders.
+  */
+ private fun refreshSky(){
+  if(previewPanel!=null || HomeSkyMode.of(AppPreferences.homeSky(context))==HomeSkyMode.PHOTO){if(sky!=null){sky=null;skyKey=null;invalidate()};return}
+  val scene=HomeSky.currentScene(context,System.currentTimeMillis())
+  if(scene.key==skyKey || scene.key==skyPending)return
+  skyPending=scene.key
+  val worker=skyWorker ?: java.util.concurrent.Executors.newSingleThreadExecutor{r->Thread(r,"saver-sky").apply{isDaemon=true;priority=Thread.MIN_PRIORITY}}.also{skyWorker=it}
+  val unit=resources.displayMetrics.let{minOf(it.widthPixels/1920f,it.heightPixels/1080f)}
+  worker.execute{
+   val picture=try{SkyRenderer.render(scene,scene.look,unit,fadeBottom=true)}catch(_:Throwable){null}
+   mainHandler.post{if(skyPending==scene.key){skyPending=null;if(picture!=null){sky=picture;skyKey=scene.key;invalidate()}}}
+  }
+ }
  override fun show(bitmap:Bitmap){showHero(bitmap,emptyList(),0)}
  private var captions=emptyList<HeroCaption>()
  /** [selection] marks one preview as the photo on screen; a negative value means the strip is what comes next. */
@@ -95,8 +118,8 @@ internal class HeroDreamView(c:Context,private val previewPanel:WeatherPanel?=nu
   val mask=LinearGradient(transition.start,0f,transition.end,0f,intArrayOf(Color.TRANSPARENT,Color.WHITE,Color.TRANSPARENT),floatArrayOf(0f,peak,1f),Shader.TileMode.CLAMP)
   return ComposeShader(image,mask,PorterDuff.Mode.DST_IN)
  }
- override fun clear(){motionEnabled=false;removeCallbacks(tick);previous?.recycle();previous=null;edge=null;oldEdge=null;current?.recycle();current=null;soft?.recycle();soft=null;oldSoft?.recycle();oldSoft=null;thumbs.forEach{it.recycle()};thumbs=emptyList()}
- override fun onDetachedFromWindow(){motionEnabled=false;removeCallbacks(tick);super.onDetachedFromWindow()}
+ override fun clear(){motionEnabled=false;removeCallbacks(tick);skyWorker?.shutdownNow();skyWorker=null;mainHandler.removeCallbacksAndMessages(null);sky=null;skyKey=null;skyPending=null;previous?.recycle();previous=null;edge=null;oldEdge=null;current?.recycle();current=null;soft?.recycle();soft=null;oldSoft?.recycle();oldSoft=null;thumbs.forEach{it.recycle()};thumbs=emptyList()}
+ override fun onDetachedFromWindow(){motionEnabled=false;removeCallbacks(tick);skyWorker?.shutdownNow();skyWorker=null;skyPending=null;super.onDetachedFromWindow()}
  override fun onDraw(canvas:Canvas){
   super.onDraw(canvas);canvas.drawColor(Color.rgb(5,14,24));val scale=min(width/1920f,height/1080f)
   canvas.save();canvas.translate((width-1920*scale)/2,(height-1080*scale)/2);canvas.scale(scale,scale)
@@ -114,6 +137,8 @@ internal class HeroDreamView(c:Context,private val previewPanel:WeatherPanel?=nu
    // A deep tint turns the blurred backdrop into a calm margin instead of a bright smear.
    paint.color=Color.argb(alpha*120/255,0,6,12);canvas.drawRect(0f,0f,1920f,1080f,paint)
    paint.alpha=alpha
+   // The sky shows only in the margins; a photo that fills the screen covers it, so it is not drawn at all.
+   sky?.let{if(rect.left>1f || rect.right<1919f || rect.top>1f)canvas.drawBitmap(it,null,skyRect,paint)}
    canvas.drawBitmap(photo,null,rect,paint)
    if(blend!=null){
     val transition=HeroFadePolicy.transition(rect.width(),rect.right)!!

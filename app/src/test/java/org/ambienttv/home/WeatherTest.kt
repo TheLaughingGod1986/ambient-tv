@@ -83,4 +83,16 @@ class WeatherTest {
   assertThrows(IllegalArgumentException::class.java) { ImagePolicy.resolve("../session.xml",available,listOf("200-3.jpg")) }
   assertThrows(java.io.FileNotFoundException::class.java) { ImagePolicy.resolve("50-1.jpg",emptySet(),emptyList()) }
  }
+ @Test fun skyDetailIsOptionalAndChecked(){
+  val full="""{"current_units":{"temperature_2m":"°C","wind_speed_10m":"km/h","wind_direction_10m":"°","cloud_cover":"%","precipitation":"mm"},"current":{"time":${now/1000},"temperature_2m":9.5,"weather_code":61,"is_day":1,"wind_speed_10m":31.2,"wind_direction_10m":250,"cloud_cover":92,"precipitation":0.4}}"""
+  val data=WeatherData.parse(full,now)
+  assertEquals(31.2,data.windKmh!!,1e-9);assertEquals(250.0,data.windFrom!!,1e-9);assertEquals(92,data.cloudCover);assertEquals(0.4,data.precipitationMm!!,1e-9)
+  assertEquals(data,WeatherData.stored(data.json()))
+  // Older stored readings and plain answers carry none of it.
+  val plain=WeatherData.parse(response(),now);assertNull(plain.windKmh);assertNull(plain.cloudCover);assertEquals(plain,WeatherData.stored(plain.json()))
+  // Other units or implausible values are left out rather than misread; a direction without a speed is dropped.
+  val odd=WeatherData.parse(full.replace("\"km/h\"","\"mph\"").replace("\"cloud_cover\":92","\"cloud_cover\":140"),now)
+  assertNull(odd.windKmh);assertNull(odd.windFrom);assertNull(odd.cloudCover);assertEquals(0.4,odd.precipitationMm!!,1e-9)
+  assertTrue(WeatherLocation.endpoint("0","0").contains("current=temperature_2m,weather_code,is_day,cloud_cover,wind_speed_10m,wind_direction_10m,precipitation&"))
+ }
 }
