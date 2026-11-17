@@ -64,10 +64,17 @@ internal data class SkyLook(
  val cloud:Int,val cloudShade:Int,val cloudCover:Double,val snowCaps:Double,val brightness:Double
 )
 
+/** Optional live detail from the weather reading. Missing values leave the sky's defaults in place. */
+internal data class SkyDetail(val windKmh:Double?=null,val windFrom:Double?=null,val cloudCover:Int?=null,val precipitationMm:Double?=null) {
+ /** Wind across the view in km/h; positive drifts right. Sunrise sits on the left, so left is east and right is west. */
+ val across:Double? get()=if(windKmh==null || windFrom==null)null else windKmh*sin(Math.toRadians(windFrom))
+ companion object { fun of(d:WeatherData)=SkyDetail(d.windKmh,d.windFrom,d.cloudCover,d.precipitationMm) }
+}
+
 /** One scene: what to draw, plus the slowly changing inputs that decide when it must be redrawn. */
-internal data class SkyScene(val weather:SkyWeather,val part:DayPart,val elevation:Double,val morning:Boolean,val sunX:Double,val sunY:Double,val moonPhase:Double,val night:Boolean) {
- /** Redraw only when something visible changes: weather, or the sun moving about one and a half degrees. */
- val key:String get()="$weather|${(elevation.coerceIn(-15.0,32.0)/1.5).roundToInt()}|$morning|${(moonPhase*8).roundToInt()%8}"
+internal data class SkyScene(val weather:SkyWeather,val part:DayPart,val elevation:Double,val morning:Boolean,val sunX:Double,val sunY:Double,val moonPhase:Double,val night:Boolean,val detail:SkyDetail=SkyDetail()) {
+ /** Redraw only when something visible changes: weather, wind, cover or rain, or the sun moving about one and a half degrees. */
+ val key:String get()="$weather|${(elevation.coerceIn(-15.0,32.0)/1.5).roundToInt()}|$morning|${(moonPhase*8).roundToInt()%8}|${detail.across?.let{(it/8).roundToInt()}}|${detail.cloudCover?.let{it/20}}|${detail.precipitationMm?.let{(it*4).roundToInt().coerceAtMost(12)}}"
  val look:SkyLook get()=SkyPolicy.look(this)
  val description:String get()=when(part){DayPart.NIGHT->"Night";DayPart.DAWN->"Sunrise";DayPart.MORNING->"Morning";DayPart.AFTERNOON->"Afternoon";DayPart.SUNSET->"Sunset";DayPart.DUSK->"Dusk"}+", "+when(weather){
   SkyWeather.CLEAR->"clear";SkyWeather.PARTLY_CLOUDY->"partly cloudy";SkyWeather.OVERCAST->"overcast";SkyWeather.FOG->"fog";SkyWeather.DRIZZLE->"drizzle"
@@ -87,7 +94,7 @@ internal object SkyPolicy {
   * The scene for a moment. [code] is the latest weather reading, or null when weather is off, stale or unavailable;
   * then the sky is fair and partly cloudy rather than pretending to know it is sunny or raining.
   */
- fun scene(millis:Long,latitude:Double,longitude:Double,code:Int?):SkyScene {
+ fun scene(millis:Long,latitude:Double,longitude:Double,code:Int?,detail:SkyDetail=SkyDetail()):SkyScene {
   val sun=SunPosition.at(millis,latitude,longitude)
   val weather=SkyWeather.of(code)
   // The sun travels across the open sky between the header text and the clock, never behind either.
@@ -95,7 +102,7 @@ internal object SkyPolicy {
   val sunX=.64+.17*progress
   val sunY=(1.0-(sun.elevation.coerceIn(-6.0,45.0)+6)/51.0)
   val phase=SunPosition.moonPhase(millis)
-  return SkyScene(weather,part(sun.elevation,sun.morning),sun.elevation,sun.morning,sunX,sunY,phase,sun.elevation< -6)
+  return SkyScene(weather,part(sun.elevation,sun.morning),sun.elevation,sun.morning,sunX,sunY,phase,sun.elevation< -6,if(code==null)SkyDetail() else detail)
  }
 
  private class Key(val elevation:Double,val top:Int,val middle:Int,val horizon:Int,val glow:Int,val glowStrength:Double,val sun:Int,val ridges:IntArray,val haze:Int,val mist:Double,val stars:Double,val cloud:Int)
@@ -168,8 +175,26 @@ internal object SkyPolicy {
   SkyWeather.FOG,SkyWeather.OVERCAST,SkyWeather.PARTLY_CLOUDY->15
   SkyWeather.CLEAR->if(night)10 else 15
  }
- /** Number of raindrops or snowflakes. */
- fun particles(weather:SkyWeather)=when(weather){SkyWeather.DRIZZLE->70;SkyWeather.LIGHT_RAIN->100;SkyWeather.RAIN->140;SkyWeather.HEAVY_RAIN,SkyWeather.THUNDER->210;SkyWeather.SNOW->120;else->0}
+ /** Number of raindrops or snowflakes; recent precipitation makes a shower lighter or heavier than its category. */
+ fun particles(weather:SkyWeather,precipitationMm:Double?=null):Int {
+  val base=when(weather){SkyWeather.DRIZZLE->70;SkyWeather.LIGHT_RAIN->100;SkyWeather.RAIN->140;SkyWeather.HEAVY_RAIN,SkyWeather.THUNDER->210;SkyWeather.SNOW->120;else->0}
+  val factor=if(precipitationMm==null)1.0 else (.55+precipitationMm*1.2).coerceIn(.55,1.6)
+  return (base*factor).roundToInt()
+ }
+ /** How many clouds drift across: from the reported cover when there is one, otherwise a default for the weather. */
+ fun clouds(weather:SkyWeather,night:Boolean,cover:Int?)=when(weather){
+  SkyWeather.CLEAR->cover?.let{(it/100.0*6).roundToInt().coerceIn(0,2)} ?: if(night)1 else 2
+  SkyWeather.PARTLY_CLOUDY->cover?.let{(it/100.0*7).roundToInt().coerceIn(2,6)} ?: 4
+  SkyWeather.FOG->4
+  else->5
+ }
+ /** Cloud speed factor, signed: no reading keeps the gentle default; calm air slows the clouds; wind speeds them up. */
+ fun drift(across:Double?):Float=when{across==null->1f;abs(across)<3->.5f;else->(sign(across)*(.6+abs(across)/12).coerceIn(.5,3.0)).toFloat()}
+ /** Sideways run of a raindrop per unit of fall, signed. */
+ fun slant(across:Double?):Float=when{across==null->.17f;abs(across)<3->.05f;else->(sign(across)*(.05+abs(across)/90).coerceAtMost(.5)).toFloat()}
+ /** After this long without a remote press the moving sky holds still until the next press. */
+ const val REST_AFTER_MS=10*60*1000L
+ fun resting(now:Long,lastActivity:Long)=now-lastActivity>=REST_AFTER_MS
  /** Gentle, infrequent lightning: a soft brightening every 18-45 seconds, far below any flashing threshold. */
  fun nextLightningMs(random:java.util.Random)=18_000L+random.nextInt(27_000)
 }

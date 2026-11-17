@@ -40,7 +40,10 @@ and media accounts are not connected. They are not photographs of a household TV
 
 - Home's background is a living sky drawn on the TV: the light changes from sunrise through morning, afternoon, sunset and dusk to a starry night with the real phase of the moon. With weather on, it shows the conditions outside: clouds drift, and rain, snow, fog or a thunderstorm move across the mountains.
 - The moving layer is small, runs at a low frame rate and stops whenever the remote is pressed, when an app or the screensaver is in front, and when Android's animations or battery saver are off. The scene itself is redrawn in the background only when the light or weather visibly changes.
-- Settings → TV & devices → Home background switches between the moving sky, a still sky and the original sunrise picture.
+- With weather on, the sky also follows the wind, cloud cover and recent rainfall: clouds drift faster on windy days and the way the wind blows, rain slants with it, a few clouds means a few clouds, and drizzle and downpours look different.
+- After ten minutes without a remote press the sky holds still; the next press starts it again.
+- The photo screensaver shows the same sky, still, at the top of the margins beside upright photos. Photos that fill the screen are unchanged.
+- Settings → TV & devices → Home background switches between the moving sky, a still sky and the original sunrise picture (which also leaves the screensaver as it was).
 
 ## New in 0.2.7
 

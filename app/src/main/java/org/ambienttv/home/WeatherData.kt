@@ -8,7 +8,9 @@ import java.util.TimeZone
 import kotlin.math.roundToInt
 
 /** Public area forecast only. No NAS data or device location is sent to the weather API. */
-data class WeatherData(val temperatureC: Double, val code: Int, val isDay: Boolean, val observedAt: Long, val fetchedAt: Long, val highC: Double?=null, val lowC: Double?=null, val rainPercent: Int?=null) {
+data class WeatherData(val temperatureC: Double, val code: Int, val isDay: Boolean, val observedAt: Long, val fetchedAt: Long, val highC: Double?=null, val lowC: Double?=null, val rainPercent: Int?=null,
+ /** Optional detail for the living sky: wind in km/h and the direction it comes from, cloud cover in %, precipitation in mm. */
+ val windKmh: Double?=null, val windFrom: Double?=null, val cloudCover: Int?=null, val precipitationMm: Double?=null) {
  companion object {
   const val TTL = 30 * 60 * 1000L
   const val MAX_AGE = 6 * 60 * 60 * 1000L
@@ -27,15 +29,22 @@ data class WeatherData(val temperatureC: Double, val code: Int, val isDay: Boole
    val high=today("temperature_2m_max");val low=today("temperature_2m_min")
    val ranged=high!=null && low!=null && low<=high
    val rain=json.optJSONObject("daily")?.optJSONArray("precipitation_probability_max")?.optDouble(0)?.takeIf{it.isFinite() && it in 0.0..100.0}?.roundToInt()
-   return WeatherData(temp,current.getInt("weather_code"),day==1,time,now,if(ranged)high else null,if(ranged)low else null,rain)
+   // Sky detail is optional too: anything missing, in other units or implausible is simply left out.
+   val units=json.getJSONObject("current_units")
+   fun current(key:String,unit:String,range:ClosedFloatingPointRange<Double>)=if(current.has(key) && units.optString(key)==unit)current.optDouble(key).takeIf{it.isFinite() && it in range} else null
+   val wind=current("wind_speed_10m","km/h",0.0..250.0);val from=current("wind_direction_10m","°",0.0..360.0)
+   return WeatherData(temp,current.getInt("weather_code"),day==1,time,now,if(ranged)high else null,if(ranged)low else null,rain,
+    wind,if(wind!=null)from else null,current("cloud_cover","%",0.0..100.0)?.roundToInt(),current("precipitation","mm",0.0..300.0))
   }
   fun stored(json: String): WeatherData {
    val j=JSONObject(json)
    return WeatherData(j.getDouble("temperatureC"),j.getInt("code"),j.getBoolean("day"),j.getLong("observedAt"),j.getLong("fetchedAt"),
-    if(j.has("highC"))j.getDouble("highC") else null,if(j.has("lowC"))j.getDouble("lowC") else null,if(j.has("rainPercent"))j.getInt("rainPercent") else null)
+    if(j.has("highC"))j.getDouble("highC") else null,if(j.has("lowC"))j.getDouble("lowC") else null,if(j.has("rainPercent"))j.getInt("rainPercent") else null,
+    if(j.has("windKmh"))j.getDouble("windKmh") else null,if(j.has("windFrom"))j.getDouble("windFrom") else null,if(j.has("cloudCover"))j.getInt("cloudCover") else null,if(j.has("precipitationMm"))j.getDouble("precipitationMm") else null)
   }
  }
- fun json()=JSONObject().put("temperatureC",temperatureC).put("code",code).put("day",isDay).put("observedAt",observedAt).put("fetchedAt",fetchedAt).apply{if(highC!=null && lowC!=null){put("highC",highC);put("lowC",lowC)};if(rainPercent!=null)put("rainPercent",rainPercent)}.toString()
+ fun json()=JSONObject().put("temperatureC",temperatureC).put("code",code).put("day",isDay).put("observedAt",observedAt).put("fetchedAt",fetchedAt).apply{if(highC!=null && lowC!=null){put("highC",highC);put("lowC",lowC)};if(rainPercent!=null)put("rainPercent",rainPercent)
+  windKmh?.let{put("windKmh",it)};windFrom?.let{put("windFrom",it)};cloudCover?.let{put("cloudCover",it)};precipitationMm?.let{put("precipitationMm",it)}}.toString()
  fun condition(): String=when(code) {
   0 -> if(isDay) "Clear sky" else "Clear night"
   1 -> "Mainly clear"; 2 -> "Partly cloudy"; 3 -> "Overcast"

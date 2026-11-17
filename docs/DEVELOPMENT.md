@@ -91,6 +91,15 @@ It stops when Home pauses or loses window focus (apps, screensaver, dialogs), wh
 animations or battery saver are off, and for 0.7 s after every remote key press, so focus
 movement never shares a frame with it. Lightning is two soft pulses at most every 18 s.
 Without a fresh weather reading the sky is fair and partly cloudy rather than a guess.
+With a reading, `SkyDetail` adds wind (cloud speed and direction, rain slant; sunrise is on
+the left of the strip, so a west wind blows leftwards), cloud cover (how many clouds) and
+recent precipitation (how many drops). After `SkyPolicy.REST_AFTER_MS` (10 minutes) without a
+remote press the moving layer stops scheduling frames until the next press.
+
+The photo screensaver (`HeroDreamView`) draws the same scene, still, at the top of the photo's
+margins, faded into its blurred backdrop. It is rendered on a minimum-priority thread when the
+scene changes and skipped entirely when the photo fills the screen or the owner chose the
+original picture.
 
 Emulator helpers: `-PtvTestRunner=org.ambienttv.home.SkyGallery` renders Home for 14 hours and
 weathers into `files/sky-gallery`; `-PtvTestRunner=org.ambienttv.home.SkyPerf` compares frame

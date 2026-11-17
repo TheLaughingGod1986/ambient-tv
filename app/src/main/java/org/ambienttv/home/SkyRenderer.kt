@@ -51,7 +51,8 @@ internal object SkyRenderer {
  private val profiles by lazy { ridges.map{heights(it)} }
  private fun path(h:FloatArray):Path=Path().apply{moveTo(0f,HEIGHT);h.forEachIndexed{i,y->lineTo(i*STEP,y)};lineTo(WIDTH+8,HEIGHT);close()}
 
- fun render(scene:SkyScene,look:SkyLook,unit:Float):Bitmap {
+ /** [fadeBottom] lets the forest fade out at the bottom edge, for the screensaver where the strip sits over a backdrop. */
+ fun render(scene:SkyScene,look:SkyLook,unit:Float,fadeBottom:Boolean=false):Bitmap {
   val bitmap=Bitmap.createBitmap(max(1,(WIDTH*unit).roundToInt()),max(1,(HEIGHT*unit).roundToInt()),Bitmap.Config.ARGB_8888)
   val c=Canvas(bitmap);c.scale(unit,unit)
   val p=Paint(Paint.ANTI_ALIAS_FLAG or Paint.DITHER_FLAG)
@@ -94,6 +95,11 @@ internal object SkyRenderer {
     c.drawCircle(x,y,rx,p);c.restore()
    }
    p.shader=null
+  }
+  if(fadeBottom){
+   p.xfermode=PorterDuffXfermode(PorterDuff.Mode.DST_OUT)
+   p.shader=LinearGradient(0f,190f,0f,HEIGHT,Color.TRANSPARENT,Color.BLACK,Shader.TileMode.CLAMP);c.drawRect(0f,190f,WIDTH,HEIGHT,p)
+   p.xfermode=null;p.shader=null
   }
   return bitmap
  }
