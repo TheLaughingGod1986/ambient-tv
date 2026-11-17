@@ -31,6 +31,9 @@ class DemoScreenshots:Instrumentation() {
    val deadline=SystemClock.elapsedRealtime()+15000
    while(SystemClock.elapsedRealtime()<deadline){var ready=false;runOnMainSync{ready=activity.readyForTest() && activity.photoReadyForTest()};if(ready)break;SystemClock.sleep(100)}
    runOnMainSync{check(activity.readyForTest() && activity.photoReadyForTest())}
+   // Wait for the living sky's fixed demo scene and its fade-in before rendering.
+   val skyDeadline=SystemClock.elapsedRealtime()+15000
+   while(SystemClock.elapsedRealtime()<skyDeadline){var shown=false;runOnMainSync{shown=activity.skyForTest().shownKeyForTest!=null};if(shown)break;SystemClock.sleep(100)}
    SystemClock.sleep(1200)
    val directory=File(c.filesDir,"demo-screenshots").apply{mkdirs()}
    fun save(view:View,name:String){

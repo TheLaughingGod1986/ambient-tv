@@ -13,6 +13,9 @@ internal object AppPreferences {
  fun birthday(c:Context)=saved(c,"birthday")
  fun birthdaySeconds(c:Context)=try{PhotoDatePolicy.parse(birthday(c))}catch(_:IllegalArgumentException){null}
  fun saveBirthday(c:Context,text:String){PhotoDatePolicy.parse(text);prefs(c).edit().putString("birthday",text.trim()).commit()}
+ /** Home background: "living" (weather and time of day, moving), "still", or "photo" for the original picture. */
+ fun homeSky(c:Context)=prefs(c).getString("homeSky","living")
+ fun setHomeSky(c:Context,mode:String){prefs(c).edit().putString("homeSky",mode).commit()}
  fun dimEvening(c:Context)=prefs(c).getBoolean("dimEvening",false)
  fun setDimEvening(c:Context,enabled:Boolean){prefs(c).edit().putBoolean("dimEvening",enabled).commit()}
  fun shortcutInput(c:Context,slot:Int)=saved(c,"shortcutInput$slot")

@@ -26,6 +26,7 @@ photo upload or API key is required. Your existing services may have their own t
 - **A photo screensaver.** A large image, matching backdrop, clock and small previews; classic multi-photo layouts are available too.
 - **Old memories and new pictures.** For a chosen person in Synology Photos Personal Space, a bounded pool mixes recent photos with older memories. Cached photos stay available offline.
 - **Continue Watching.** Read eligible Android TV records and optionally connect Plex for real progress and server-provided next episodes. Hold OK on a card to hide it locally.
+- **A living sky.** The scene behind Home follows the time of day (sunrise, morning, afternoon, sunset, dusk and night) and, with weather on, the weather: drifting clouds, rain, snow, fog or a gentle thunderstorm. It pauses whenever the remote is used. Choose a still sky or the original sunrise picture in Settings.
 - **Optional weather.** Choose a place yourself. Weather starts switched off; the clock uses your TV's time zone.
 - **Optional Projectivy integration.** Use the photos as a wallpaper provider instead of making Ambient TV your Home app.
 
@@ -34,6 +35,12 @@ photo upload or API key is required. Your existing services may have their own t
 *These images are generated-scene demo renders from the Android app's production
 views on an emulator. They contain no personal photos or account history. Weather
 and media accounts are not connected. They are not photographs of a household TV.*
+
+## New in 0.2.8
+
+- Home's background is a living sky drawn on the TV: the light changes from sunrise through morning, afternoon, sunset and dusk to a starry night with the real phase of the moon. With weather on, it shows the conditions outside: clouds drift, and rain, snow, fog or a thunderstorm move across the mountains.
+- The moving layer is small, runs at a low frame rate and stops whenever the remote is pressed, when an app or the screensaver is in front, and when Android's animations or battery saver are off. The scene itself is redrawn in the background only when the light or weather visibly changes.
+- Settings → TV & devices → Home background switches between the moving sky, a still sky and the original sunrise picture.
 
 ## New in 0.2.7
 
