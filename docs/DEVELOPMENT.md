@@ -24,6 +24,7 @@ photo acquisition/rendering, the DreamService and optional media integrations.
 | Hero screensaver | `PhotoDreamService.kt`, `HeroDreamView.kt`, `HeroComposition.kt`, `HeroBackdrop.kt` |
 | Continue Watching | `WatchNextReader.kt`, `PlexFeed.kt`, `PlexProtocol.kt`, `HomeDismissals.kt` |
 | Weather opt-in | `AppPreferences.kt`, `WeatherStore.kt`, `WeatherData.kt` |
+| Living sky behind Home | `SkyPolicy.kt` (sun, weather, palettes), `SkyRenderer.kt` (still scene), `SkyMotionView.kt` (moving layer), `HomeSky.kt` (when to redraw) |
 | Demo data and documentation images | `DemoPhotos.kt`, `DemoScreenshots.kt` in androidTest, `docs/ASSETS.md` |
 
 Production Kotlin lives in `app/src/main/java/org/ambienttv/home/`. Tests live in
@@ -76,7 +77,25 @@ The compact sidebar reserves a 96px icon rail and a 28px gutter. Expanded labels
 sit on a solid navy panel that fades out to the right (`SidebarScrim`), without
 moving the content, so page text never shows through the menu. Labels and widths
 change in one layout pass; only the fade's opacity animates. All eight
-pages share the mountain sunset and stacked clock/date treatment.
+pages share the living sky (or the original mountain sunrise) and stacked clock/date treatment.
+
+## Living sky
+
+The still scene (sky, sun or moon, stars, cloud deck, five mountain ranges, valley mist and
+forest) is drawn in code into one header-sized bitmap on a low-priority thread. It is
+redrawn only when `SkyScene.key` changes: the weather category, or the sun moving about
+1.5°. Night therefore keeps one picture; near sunset a new one cross-fades in every
+ten minutes or so. The moving layer (`SkyMotionView`) is only as large as the visible strip,
+is a GPU layer, runs at 10-30 fps depending on the weather, and allocates nothing per frame.
+It stops when Home pauses or loses window focus (apps, screensaver, dialogs), when Android
+animations or battery saver are off, and for 0.7 s after every remote key press, so focus
+movement never shares a frame with it. Lightning is two soft pulses at most every 18 s.
+Without a fresh weather reading the sky is fair and partly cloudy rather than a guess.
+
+Emulator helpers: `-PtvTestRunner=org.ambienttv.home.SkyGallery` renders Home for 14 hours and
+weathers into `files/sky-gallery`; `-PtvTestRunner=org.ambienttv.home.SkyPerf` compares frame
+times against the original picture at rest and while browsing. A software-rendered emulator
+is far slower than TV hardware: use those numbers only to compare, and measure on the TV.
 
 Daily photo selection uses the Europe/London calendar day, retains its chosen
 provider IDs through background cache refreshes, and prefers scenes absent from

@@ -151,6 +151,11 @@ label and latitude/longitude, check **Show weather for a place I choose**, then
 choose **Save weather settings**. A nearby city centre is enough; your exact home
 coordinates are unnecessary. Uncheck and save to switch it off.
 
+With weather on, Home's living sky shows the current conditions (clouds, rain, snow, fog or
+thunder). The same coordinates also place the sun for sunrise and sunset; that part is
+worked out on the TV and sends nothing. With weather off, the sky follows the time of day
+only, uses a fair partly cloudy sky, and estimates the sun from the TV's time zone.
+
 Your chosen coordinates and network address reach Open-Meteo. The app requests no
 Android location permission. Conditions are cached and can lag the weather outside.
 Review [Open-Meteo's current API terms](https://open-meteo.com/en/docs) if you adapt

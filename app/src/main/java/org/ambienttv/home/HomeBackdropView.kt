@@ -1,15 +1,19 @@
 package org.ambienttv.home
 import android.content.Context
 import android.graphics.*
+import android.os.SystemClock
 import android.view.View
-/** Quiet native ambience using the existing mountain photograph; no animation. */
-internal class HomeBackdropView(c:Context,private val sunrise:Boolean=false):View(c) {
+/**
+ * Quiet native ambience behind Home. With [living] it shows the code-drawn sky for the hour and weather,
+ * cross-fading when the scene changes; otherwise the bundled mountain photograph. No animation of its own.
+ */
+internal class HomeBackdropView(c:Context,private val sunrise:Boolean=false,private val living:Boolean=false):View(c) {
  private var mountains:Bitmap?=null
  init {
   // Cache the static multi-pass scenery on the GPU; focus changes only composite it.
   setLayerType(View.LAYER_TYPE_HARDWARE,null)
-  // Decode the static wallpaper without blocking the first focusable frame.
-  Thread({
+  // Decode the static wallpaper without blocking the first focusable frame. The living sky needs no photograph.
+  if(!living)Thread({
    val decoded=BitmapFactory.decodeResource(resources,if(sunrise)R.drawable.home_sunrise else R.drawable.home_mountains)
    val strip=if(sunrise && decoded!=null)headerStrip(decoded)else null
    post{mountains=strip ?: decoded;cropped=strip!=null;invalidate()}
@@ -17,6 +21,17 @@ internal class HomeBackdropView(c:Context,private val sunrise:Boolean=false):Vie
  }
  private var cropped=false
  private val headerArea=RectF(104f,0f,1920f,360f)
+ private var scene:Bitmap?=null
+ private var previous:Bitmap?=null
+ private var fadeStart=0L
+ private var fadeMs=1L
+ private val fadePaint=Paint(Paint.FILTER_BITMAP_FLAG)
+ /** Shows a newly rendered sky. The first one fades in from the navy base; later ones cross-fade. */
+ fun showScene(next:Bitmap){
+  if(!living)return
+  previous=scene;scene=next
+  fadeMs=if(previous==null)600L else 1500L;fadeStart=SystemClock.uptimeMillis();invalidate()
+ }
  /** Keep only the rows the header shows, at the size they are drawn, instead of the whole panorama. */
  private fun headerStrip(source:Bitmap):Bitmap? = try {
   val cropH=(source.width*360f/1816f).toInt().coerceAtMost(source.height);val top=(source.height-cropH)/2
@@ -35,8 +50,14 @@ internal class HomeBackdropView(c:Context,private val sunrise:Boolean=false):Vie
  override fun onDraw(c:Canvas){
   c.save();c.scale(width/1920f,height/1080f)
   p.shader=base;c.drawRect(0f,0f,1920f,1080f,p);p.shader=null
+  if(living){
+   val progress=((SystemClock.uptimeMillis()-fadeStart).toFloat()/fadeMs).coerceIn(0f,1f)
+   previous?.let{if(progress<1f){fadePaint.alpha=255;c.drawBitmap(it,null,headerArea,fadePaint)}}
+   scene?.let{fadePaint.alpha=(progress*255).toInt();c.drawBitmap(it,null,headerArea,fadePaint)}
+   if(progress<1f)postInvalidateOnAnimation()else previous=null
+  }
   val mountains=this.mountains
-  if(mountains!=null){
+  if(!living && mountains!=null){
   if(cropped)c.drawBitmap(mountains,null,headerArea,p)
   else if(sunrise){
    // Crop the panorama to the header without stretching; keep the sun above the cards.

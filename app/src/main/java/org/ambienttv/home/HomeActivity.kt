@@ -34,6 +34,7 @@ class HomeActivity:Activity() {
  internal fun feedSnapshotForTest()=displayedWatchItems.toList()
  internal fun feedObservingForTest()=observingFeed
  internal fun showPageForTest(name:String)=showPage(name)
+ internal fun skyForTest()=sky
  internal fun secondaryReadyForTest():Boolean {
   fun loading(v:View):Boolean {
    if(v is TextView && v.text.toString().startsWith("Loading your Plex"))return true
@@ -96,7 +97,8 @@ class HomeActivity:Activity() {
    }
   }
  }
- private lateinit var backdrop:HomeBackdropView
+ private lateinit var sky:HomeSky
+ private var resumed=false
  private lateinit var sidebarPanel:View
  private var sidebarScrim:View?=null
  private val navViews=mutableListOf<TextView>()
@@ -154,7 +156,8 @@ class HomeActivity:Activity() {
  }
  override fun onRequestPermissionsResult(code:Int,permissions:Array<out String>,results:IntArray){super.onRequestPermissionsResult(code,permissions,results);if(code==42 && page=="Home")showPage("Home")}
  override fun onNewIntent(intent:Intent) {super.onNewIntent(intent);setIntent(intent);if(intent.hasCategory(Intent.CATEGORY_HOME)){if(page!="Home")showPage("Home");refreshFeedOnReturn()}}
- override fun onResume() { super.onResume();updateHeader() // settings may have changed weather or dimming while away
+ override fun onResume() { super.onResume();resumed=true;if(::sky.isInitialized)sky.applyMode(root);updateHeader() // settings may have changed weather or dimming while away
+  if(::sky.isInitialized)sky.setRunning(hasWindowFocus())
   if(compactLayout!=getSharedPreferences("home-ui",0).getBoolean("compactSidebar",false))showPage(page);handler.post(sidebarUpdate);feedActive=true
   // The viewer can remove a favourite; show the Favourites grid as it is now.
   if(resumedOnce && page=="Photos" && galleryFavourites && favourites().map{it.name}!=galleryNames)showPage("Photos")
@@ -163,7 +166,11 @@ class HomeActivity:Activity() {
   refreshFeedOnReturn();handler.removeCallbacks(feedPoll);handler.postDelayed(feedPoll,60000)
   handler.removeCallbacks(tick);handler.post(tick)
  }
- override fun onPause() {rememberFocus();feedActive=false;feedSeen=false;feedState.pause();handler.removeCallbacks(feedRead);handler.removeCallbacks(nativeRead);nativeWorker.queue.clear();handler.removeCallbacks(feedPoll);handler.removeCallbacks(feedReturnRetry);handler.removeCallbacks(feedReturnFinalRetry)
+ /** A screensaver, dialog or overlay in front of Home stops the moving sky; it resumes when Home is in front again. */
+ override fun onWindowFocusChanged(hasFocus:Boolean){super.onWindowFocusChanged(hasFocus);if(::sky.isInitialized)sky.setRunning(hasFocus && resumed)}
+ /** Any remote press briefly freezes the sky, so focus movement never shares a frame with it. */
+ override fun dispatchKeyEvent(event:KeyEvent):Boolean{if(event.action==KeyEvent.ACTION_DOWN && ::sky.isInitialized)sky.yieldToRemote();return super.dispatchKeyEvent(event)}
+ override fun onPause() {resumed=false;if(::sky.isInitialized)sky.setRunning(false);rememberFocus();feedActive=false;feedSeen=false;feedState.pause();handler.removeCallbacks(feedRead);handler.removeCallbacks(nativeRead);nativeWorker.queue.clear();handler.removeCallbacks(feedPoll);handler.removeCallbacks(feedReturnRetry);handler.removeCallbacks(feedReturnFinalRetry)
   if(observingFeed){contentResolver.unregisterContentObserver(feedObserver);observingFeed=false};handler.removeCallbacks(tick);super.onPause() }
  override fun onTrimMemory(level:Int) {
   super.onTrimMemory(level)
@@ -175,7 +182,7 @@ class HomeActivity:Activity() {
  }
  override fun onLowMemory(){super.onLowMemory();trimCaches()}
  private fun trimCaches(){PlexFeed.trimArtwork();WatchNextReader.trimArtwork();PhotoThumbs.clear();ArtThumbs.clear();AppIcons.clear()}
- override fun onDestroy() { unregisterReceiver(homePress);epoch++;handler.removeCallbacksAndMessages(null);worker.shutdownNow();artworkWorker.shutdownNow();nativeWorker.shutdownNow();catalogWorker.shutdownNow();appsWorker.shutdownNow();feedWorker.shutdownNow();if(::root.isInitialized)clearPage();PhotoThumbs.clear();ArtThumbs.clear();super.onDestroy() }
+ override fun onDestroy() { unregisterReceiver(homePress);if(::sky.isInitialized)sky.release();epoch++;handler.removeCallbacksAndMessages(null);worker.shutdownNow();artworkWorker.shutdownNow();nativeWorker.shutdownNow();catalogWorker.shutdownNow();appsWorker.shutdownNow();feedWorker.shutdownNow();if(::root.isInitialized)clearPage();PhotoThumbs.clear();ArtThumbs.clear();super.onDestroy() }
  private fun clearPage() {
   sidebarScrim?.animate()?.cancel();sidebarScrim=null;navViews.clear();sidebarExpanded=null;epoch++;mediaEpoch++;worker.queue.clear();artworkWorker.queue.clear();nativeWorker.queue.clear();catalogWorker.queue.clear();appsWorker.queue.clear();focusViews.clear();photoSlots.clear();mediaSignature=nothingDrawn
   mediaArtShown=0
@@ -187,8 +194,9 @@ class HomeActivity:Activity() {
    if(view is android.view.ViewGroup){val inside=reused || kept.any{it===view};for(i in 0 until view.childCount)detach(view.getChildAt(i),inside)}
   }
   detach(root,false)
-  // The backdrop stays attached, so its rendered layer survives page changes.
-  if(::backdrop.isInitialized && root.childCount>0 && root.getChildAt(0)===backdrop)root.removeViews(1,root.childCount-1)else root.removeAllViews()
+  // The backdrop and moving sky stay attached, so their rendered layers survive page changes.
+  val keptSky=if(::sky.isInitialized)sky.views.withIndex().takeWhile{(i,v)->i<root.childCount && root.getChildAt(i)===v}.count() else 0
+  if(keptSky>0)root.removeViews(keptSky,root.childCount-keptSky)else root.removeAllViews()
  }
  private fun p(v:Int)=(v*scale).toInt()
  private fun place(view:View,x:Int,y:Int,w:Int,h:Int) { val content=x>=244;root.addView(view,FrameLayout.LayoutParams(if(content)contentPx(w)else p(w),p(h)).apply { leftMargin=p(if(content)HomeLayout.contentX(x,compactLayout)else x);topMargin=p(y) }) }
@@ -225,8 +233,8 @@ class HomeActivity:Activity() {
   rememberFocus()
   if(name!=page && name in listOf("Movies","TV Shows","Anime")){catalogPageIndex=0;catalogFocusAfterLoad=null}
   compactLayout=getSharedPreferences("home-ui",0).getBoolean("compactSidebar",false);page=name;clearPage()
-  if(!::backdrop.isInitialized)backdrop=HomeBackdropView(this,true)
-  if(backdrop.parent==null)root.addView(backdrop,0,FrameLayout.LayoutParams(-1,-1))
+  if(!::sky.isInitialized)sky=HomeSky(this,previewFiles!=null)
+  sky.attach(root)
   // The header, clock and side menu are the same on every page, so they are built once and re-attached.
   if(!::header.isInitialized)header=HomeWeatherView(this)
   place(header,244,38,600,110)
@@ -292,6 +300,8 @@ class HomeActivity:Activity() {
   val dim=previewFiles==null && DimPolicy.active(System.currentTimeMillis(),AppPreferences.dimEvening(this))
   if(dim!=(root.foreground!=null))root.foreground=if(dim)android.graphics.drawable.ColorDrawable(Color.argb(DimPolicy.ALPHA,0,0,0)) else null
   header.update(previewWeather ?: WeatherStore.panel(this))
+  // Redraws only when the light or the weather has visibly changed; the render runs off the main thread.
+  if(::sky.isInitialized)sky.refresh()
   clock.text=run {
    val now=Date();val time=SimpleDateFormat("HH:mm",Locale.getDefault()).format(now);val date=SimpleDateFormat("EEE, d MMM",Locale.getDefault()).format(now)
    android.text.SpannableString("$time\n$date").apply {
@@ -766,7 +776,7 @@ class HomeActivity:Activity() {
  private fun settingsPage(){
   heading("Ambient TV settings");subheading("Manage devices, services and photo display")
   val groups=listOf(
-   "TV & devices" to listOf(Triple("TV & inputs","Configure connected TV",{showPage("TV")}),Triple("Android settings","System settings",{safeStart(Intent(Settings.ACTION_SETTINGS))}),Triple("Android screensaver settings","Display and timeout",{safeStart(Intent(Settings.ACTION_DREAM_SETTINGS))})),
+   "TV & devices" to listOf(Triple("TV & inputs","Configure connected TV",{showPage("TV")}),Triple("Android settings","System settings",{safeStart(Intent(Settings.ACTION_SETTINGS))}),Triple("Android screensaver settings","Display and timeout",{safeStart(Intent(Settings.ACTION_DREAM_SETTINGS))}),Triple("Home background",sky.mode.label,{cycleSky()})),
    "Connected services" to listOf(Triple("Connect Plex","Manage your media server",{safeStart(Intent(this,PlexConnectActivity::class.java))}),Triple("Open Projectivy","Launch your TV interface",{launchPackage("com.spocky.projengmenu")}),Triple("Photo connection settings",PhotoSync.summary(this).substringBefore("\n"),{safeStart(Intent(this,SettingsActivity::class.java))})).filter{it.first!="Open Projectivy" || packageManager.getLeanbackLaunchIntentForPackage("com.spocky.projengmenu")!=null},
    "Personalisation" to listOf(Triple("Photo screensaver","Family photos and timing",{safeStart(Intent(this,DreamSettingsActivity::class.java))}),Triple("Status & backup","Connections and local preferences",{safeStart(Intent(this,MaintenanceActivity::class.java))}),Triple("Restore hidden videos","${HomeDismissals.count(this)} hidden from Home",{restoreHiddenVideos()}),Triple("Start screensaver","Show family memories now",{startScreensaver()})))
   val controls=mutableMapOf<Pair<Int,Int>,View>()
@@ -775,6 +785,11 @@ class HomeActivity:Activity() {
   controls.forEach{(pos,v)->val(c,r)=pos;v.nextFocusLeftId=controls[(c-1) to r]?.id ?: if(c==0)navId else controls[(c-1) to 0]?.id ?: navId;v.nextFocusRightId=controls[(c+1) to r]?.id ?: controls[(c+1) to 0]?.id ?: v.id;v.nextFocusUpId=controls[c to (r-1)]?.id ?: v.id;v.nextFocusDownId=controls[c to (r+1)]?.id ?: v.id}
   navViews.forEach{it.nextFocusRightId=controls[0 to 0]!!.id}
   place(text("Settings open the existing Android TV, Plex and Synology integrations.",21),244,1000,1648,48)
+ }
+ /** Steps through moving sky, still sky and the original picture; the change shows at once behind the page. */
+ private fun cycleSky(){
+  val next=sky.mode.next();AppPreferences.setHomeSky(this,next.key);sky.applyMode(root);sky.setRunning(hasWindowFocus() && resumed)
+  (currentFocus as? TextView)?.let{v->val label="Home background";val copy=android.text.SpannableString(label+"\n"+next.label);copy.setSpan(android.text.style.AbsoluteSizeSpan(p(20)),label.length+1,copy.length,0);v.text=copy;v.contentDescription="$label, ${next.label}"}
  }
  private fun searchPage(){
   heading("Search");subheading("Find videos on YouTube")
