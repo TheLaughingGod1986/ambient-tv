@@ -845,7 +845,7 @@ class HomeActivity:Activity() {
  }
  private fun launchPackage(pkg:String) {
   val intent=packageManager.getLeanbackLaunchIntentForPackage(pkg) ?: packageManager.getLaunchIntentForPackage(pkg)
-  if(intent!=null)safeStart(intent) else Toast.makeText(this,"This app is not available",Toast.LENGTH_SHORT).show()
+  if(intent!=null){AppHandover.opening(this,pkg);safeStart(intent)} else Toast.makeText(this,"This app is not available",Toast.LENGTH_SHORT).show()
  }
  private fun openTv() {
   val intent=Intent(Intent.ACTION_VIEW,android.media.tv.TvContract.Channels.CONTENT_URI)

@@ -39,6 +39,7 @@ and media accounts are not connected. They are not photographs of a household TV
 ## New in 0.2.9
 
 - When the screensaver ends, the moving sky starts again straight away instead of waiting for a remote press, and it holds still while the screensaver is showing. Android 9 TVs show the screensaver over Home without pausing it, so Home now follows the screensaver itself.
+- One app at a time: when Home opens an app, it asks Android to close the different app it opened before, if that app is only waiting in the background. A film left paused in one app can otherwise keep the TV's video decoder, so the next app's video will not start or freezes. Status & backup has a switch for it. Android 14 and later do not allow this, so nothing changes there.
 
 ## New in 0.2.8
 

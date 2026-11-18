@@ -46,6 +46,11 @@ local integrations; this is not an HTTPS-only app.
 - **Internet:** NAS, Plex, published media artwork and optional weather.
 - **TV listings / EPG read:** read the system's eligible Watch Next records. Some
   TV firmware restricts this even when the app requests it.
+- **Close background apps:** when Home opens an app, it asks Android to close the
+  different app Home opened before it, so a paused video there releases the TV's
+  video decoder. Android only closes apps that are in the background, the request
+  names one app, and nothing is read from that app. Status & backup can turn it
+  off. Android 14 and later ignore the request.
 - **Dream service binding:** Android uses this to run the selected screensaver.
 - **Accessibility, optional:** the legacy Home bridge requests window-change
   events and the active window's package name. Android grants broader access to

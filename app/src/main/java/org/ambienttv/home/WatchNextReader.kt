@@ -17,6 +17,7 @@ data class WatchItem(val title:String,val owner:String,val intentUri:String,val 
    requested.setPackage(owner)
    val resolved=requested.resolveActivity(c.packageManager)
    if(!WatchNextPolicy.sameOwner(owner,resolved?.packageName))throw IllegalArgumentException()
+   AppHandover.opening(c,owner)
    c.startActivity(requested)
   }catch(_:Exception){android.widget.Toast.makeText(c,"This programme link is unavailable. Open the app to continue.",android.widget.Toast.LENGTH_LONG).show()}
 

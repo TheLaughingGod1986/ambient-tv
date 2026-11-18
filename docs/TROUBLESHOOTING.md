@@ -15,6 +15,7 @@ a NAS account. Keep a short note of the error message; do not export account fil
 | No newer or older photo appears | Check person membership in Synology Photos and allow a successful refresh. The scan is bounded to 10,000 metadata entries; larger collections need an extended pagination design. |
 | Weather is missing | Enable it, enter valid coordinates and save. It is off by default. Stale readings are hidden. |
 | Home shows different Plex progress | Check which profile authorized Ambient TV. The native player's current profile may be different. |
+| A video will not start or freezes after switching apps | Another app may still hold the TV's video decoder, usually one left paused with the Home button. Leave a video with Back before pressing Home, or close that app in Android settings → Apps → Force stop. With **One app at a time** on (Status & backup), Home closes the app you opened before when you open a different one from Home. Apps opened with a dedicated remote button are not covered, and Android 14 and later do not allow it. |
 | YouTube cards are old | Check YouTube History inside YouTube. Ambient TV reads the feed YouTube publishes; a fresh read cannot invent missing records. |
 | Next Plex episode is absent | Plex must supply an eligible unstarted episode. Finish/resume normally in Plex; do not fabricate progress or next episodes. |
 | A hidden card stays missing | Open Home Settings → Restore hidden videos. Hiding does not change your native watch history. |
