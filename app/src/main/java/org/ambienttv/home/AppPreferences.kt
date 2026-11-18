@@ -16,6 +16,9 @@ internal object AppPreferences {
  /** Home background: "living" (weather and time of day, moving), "still", or "photo" for the original picture. */
  fun homeSky(c:Context)=prefs(c).getString("homeSky","living")
  fun setHomeSky(c:Context,mode:String){prefs(c).edit().putString("homeSky",mode).commit()}
+ /** Opening an app from Home closes the different app opened before it, which frees the TV's video decoder. */
+ fun closeLeftApp(c:Context)=prefs(c).getBoolean("closeLeftApp",true)
+ fun setCloseLeftApp(c:Context,enabled:Boolean){prefs(c).edit().putBoolean("closeLeftApp",enabled).commit()}
  fun dimEvening(c:Context)=prefs(c).getBoolean("dimEvening",false)
  fun setDimEvening(c:Context,enabled:Boolean){prefs(c).edit().putBoolean("dimEvening",enabled).commit()}
  fun shortcutInput(c:Context,slot:Int)=saved(c,"shortcutInput$slot")

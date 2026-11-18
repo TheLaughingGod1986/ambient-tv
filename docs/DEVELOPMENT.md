@@ -250,6 +250,21 @@ adds the day's chance of rain when the service returns it. `DimPolicy` draws an
 optional dark overlay over Home and both screensaver layouts between 21:00 and
 07:00 by the TV's clock; it is off until enabled in Photo connection settings.
 
+## One app at a time
+
+TVs have few hardware video decoders. An app left paused behind Home can keep one (and
+re-acquire it after Android reclaims it), and the next app's video then fails to configure or
+freezes at the start. `AppHandover.opening` runs just before Home starts an app, from an app
+tile or a Continue Watching card: it remembers that package and, when it differs from the
+one Home opened before, calls `ActivityManager.killBackgroundProcesses` for the earlier one
+on a short-lived thread. Android closes only processes that are in the background, so an app
+with a foreground service (music, a download) survives. Opening the same app again closes
+nothing, inputs and settings screens are not counted as apps, and the demo preview never
+closes anything. The owner can switch it off in Status & backup (`closeLeftApp`). From
+Android 14 the platform ignores the call for other packages, so this helps on older TVs
+only; apps started by a dedicated remote button never pass through Home and are not covered.
+The cost is a cold start the next time the closed app is opened.
+
 ## Input shortcuts on Home
 
 `HomeShortcuts` lets the owner pin up to two of the TV's own passthrough inputs

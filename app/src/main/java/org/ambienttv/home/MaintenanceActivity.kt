@@ -23,6 +23,7 @@ class MaintenanceActivity:Activity(){
   fun button(label:String,action:()->Unit){root.addView(Button(this).apply{text=label;textSize=20f;minHeight=60;setOnClickListener{action()}})}
   button("Refresh Continue Watching now"){refresh()}
   root.addView(Switch(this).apply{text="Compact sidebar · show labels when focused";textSize=20f;setTextColor(Color.WHITE);setPadding(0,12,0,12);isChecked=getSharedPreferences("home-ui",0).getBoolean("compactSidebar",false);setOnCheckedChangeListener{_,checked->getSharedPreferences("home-ui",0).edit().putBoolean("compactSidebar",checked).apply()}})
+  root.addView(Switch(this).apply{text="One app at a time · opening an app from Home closes the last one, so its video cannot block the new one";textSize=20f;setTextColor(Color.WHITE);setPadding(0,12,0,12);isChecked=AppPreferences.closeLeftApp(this@MaintenanceActivity);setOnCheckedChangeListener{_,checked->AppPreferences.setCloseLeftApp(this@MaintenanceActivity,checked)}})
   button("Default photo framing"){PhotoFraming.choose(this){showStatus()}}
   button("Export preferences"){document(Intent.ACTION_CREATE_DOCUMENT,1)}
   button("Restore preferences"){document(Intent.ACTION_OPEN_DOCUMENT,2)}
