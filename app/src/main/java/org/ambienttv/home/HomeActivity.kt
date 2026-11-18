@@ -35,6 +35,8 @@ class HomeActivity:Activity() {
  internal fun feedObservingForTest()=observingFeed
  internal fun showPageForTest(name:String)=showPage(name)
  internal fun skyForTest()=sky
+ /** Emulator checks only: what Android 9 sends around a screensaver, without the lifecycle changes newer Android adds. */
+ internal fun dreamForTest(started:Boolean){dreamWatch.onReceive(this,Intent(if(started)Intent.ACTION_DREAMING_STARTED else Intent.ACTION_DREAMING_STOPPED))}
  internal fun secondaryReadyForTest():Boolean {
   fun loading(v:View):Boolean {
    if(v is TextView && v.text.toString().startsWith("Loading your Plex"))return true
@@ -137,6 +139,20 @@ class HomeActivity:Activity() {
   // for an actual Home-key broadcast; dream dismissal never sends this reason.
   if(intent?.action==Intent.ACTION_CLOSE_SYSTEM_DIALOGS && intent.getStringExtra("reason")=="homekey"){if(page!="Home")showPage("Home");refreshFeedOnReturn()}
  }}
+ /**
+  * On Android 9 TVs a screensaver covers Home without pausing it, and waking from it need not hand Home a
+  * focus change, so the sky follows the screensaver itself: still behind it, moving again as it ends.
+  */
+ private var dreaming=false
+ private val dreamWatch=object:BroadcastReceiver(){override fun onReceive(context:Context?,intent:Intent?){
+  dreaming=intent?.action==Intent.ACTION_DREAMING_STARTED
+  updateSky()
+  // Home's window may still be coming back as the screensaver ends; ask once more after it has drawn.
+  handler.removeCallbacks(skyAfterDream);if(!dreaming)handler.postDelayed(skyAfterDream,800)
+ }}
+ private val skyAfterDream=Runnable{updateSky()}
+ /** The sky moves while Home is in front and no screensaver covers it; a dialog or overlay taking focus pauses it. */
+ private fun updateSky(focused:Boolean=true){if(::sky.isInitialized)sky.setRunning(resumed && !dreaming && focused)}
  override fun onCreate(savedInstanceState:Bundle?) {
   super.onCreate(savedInstanceState)
   window.decorView.systemUiVisibility=View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
@@ -151,13 +167,15 @@ class HomeActivity:Activity() {
  @android.annotation.SuppressLint("UnspecifiedRegisterReceiverFlag")
  private fun registerHomePress(){
   val filter=IntentFilter(Intent.ACTION_CLOSE_SYSTEM_DIALOGS)
+  val dreams=IntentFilter(Intent.ACTION_DREAMING_STARTED).apply{addAction(Intent.ACTION_DREAMING_STOPPED)}
   // The flag overload is API33+. Android23-32 have only the legacy registration.
-  if(Build.VERSION.SDK_INT>=33)registerReceiver(homePress,filter,Context.RECEIVER_NOT_EXPORTED)else registerReceiver(homePress,filter)
+  if(Build.VERSION.SDK_INT>=33){registerReceiver(homePress,filter,Context.RECEIVER_NOT_EXPORTED);registerReceiver(dreamWatch,dreams,Context.RECEIVER_NOT_EXPORTED)}
+  else{registerReceiver(homePress,filter);registerReceiver(dreamWatch,dreams)}
  }
  override fun onRequestPermissionsResult(code:Int,permissions:Array<out String>,results:IntArray){super.onRequestPermissionsResult(code,permissions,results);if(code==42 && page=="Home")showPage("Home")}
  override fun onNewIntent(intent:Intent) {super.onNewIntent(intent);setIntent(intent);if(intent.hasCategory(Intent.CATEGORY_HOME)){if(page!="Home")showPage("Home");refreshFeedOnReturn()}}
  override fun onResume() { super.onResume();resumed=true;if(::sky.isInitialized)sky.applyMode(root);updateHeader() // settings may have changed weather or dimming while away
-  if(::sky.isInitialized)sky.setRunning(hasWindowFocus())
+  updateSky()
   if(compactLayout!=getSharedPreferences("home-ui",0).getBoolean("compactSidebar",false))showPage(page);handler.post(sidebarUpdate);feedActive=true
   // The viewer can remove a favourite; show the Favourites grid as it is now.
   if(resumedOnce && page=="Photos" && galleryFavourites && favourites().map{it.name}!=galleryNames)showPage("Photos")
@@ -166,11 +184,11 @@ class HomeActivity:Activity() {
   refreshFeedOnReturn();handler.removeCallbacks(feedPoll);handler.postDelayed(feedPoll,60000)
   handler.removeCallbacks(tick);handler.post(tick)
  }
- /** A screensaver, dialog or overlay in front of Home stops the moving sky; it resumes when Home is in front again. */
- override fun onWindowFocusChanged(hasFocus:Boolean){super.onWindowFocusChanged(hasFocus);if(::sky.isInitialized)sky.setRunning(hasFocus && resumed)}
+ /** A dialog or overlay taking focus from Home stops the moving sky; it resumes when Home has focus again. */
+ override fun onWindowFocusChanged(hasFocus:Boolean){super.onWindowFocusChanged(hasFocus);updateSky(hasFocus)}
  /** Any remote press briefly freezes the sky, so focus movement never shares a frame with it. */
  override fun dispatchKeyEvent(event:KeyEvent):Boolean{if(event.action==KeyEvent.ACTION_DOWN && ::sky.isInitialized)sky.yieldToRemote();return super.dispatchKeyEvent(event)}
- override fun onPause() {resumed=false;if(::sky.isInitialized)sky.setRunning(false);rememberFocus();feedActive=false;feedSeen=false;feedState.pause();handler.removeCallbacks(feedRead);handler.removeCallbacks(nativeRead);nativeWorker.queue.clear();handler.removeCallbacks(feedPoll);handler.removeCallbacks(feedReturnRetry);handler.removeCallbacks(feedReturnFinalRetry)
+ override fun onPause() {resumed=false;updateSky();rememberFocus();feedActive=false;feedSeen=false;feedState.pause();handler.removeCallbacks(feedRead);handler.removeCallbacks(nativeRead);nativeWorker.queue.clear();handler.removeCallbacks(feedPoll);handler.removeCallbacks(feedReturnRetry);handler.removeCallbacks(feedReturnFinalRetry)
   if(observingFeed){contentResolver.unregisterContentObserver(feedObserver);observingFeed=false};handler.removeCallbacks(tick);super.onPause() }
  override fun onTrimMemory(level:Int) {
   super.onTrimMemory(level)
@@ -182,7 +200,7 @@ class HomeActivity:Activity() {
  }
  override fun onLowMemory(){super.onLowMemory();trimCaches()}
  private fun trimCaches(){PlexFeed.trimArtwork();WatchNextReader.trimArtwork();PhotoThumbs.clear();ArtThumbs.clear();AppIcons.clear()}
- override fun onDestroy() { unregisterReceiver(homePress);if(::sky.isInitialized)sky.release();epoch++;handler.removeCallbacksAndMessages(null);worker.shutdownNow();artworkWorker.shutdownNow();nativeWorker.shutdownNow();catalogWorker.shutdownNow();appsWorker.shutdownNow();feedWorker.shutdownNow();if(::root.isInitialized)clearPage();PhotoThumbs.clear();ArtThumbs.clear();super.onDestroy() }
+ override fun onDestroy() { unregisterReceiver(homePress);unregisterReceiver(dreamWatch);if(::sky.isInitialized)sky.release();epoch++;handler.removeCallbacksAndMessages(null);worker.shutdownNow();artworkWorker.shutdownNow();nativeWorker.shutdownNow();catalogWorker.shutdownNow();appsWorker.shutdownNow();feedWorker.shutdownNow();if(::root.isInitialized)clearPage();PhotoThumbs.clear();ArtThumbs.clear();super.onDestroy() }
  private fun clearPage() {
   sidebarScrim?.animate()?.cancel();sidebarScrim=null;navViews.clear();sidebarExpanded=null;epoch++;mediaEpoch++;worker.queue.clear();artworkWorker.queue.clear();nativeWorker.queue.clear();catalogWorker.queue.clear();appsWorker.queue.clear();focusViews.clear();photoSlots.clear();mediaSignature=nothingDrawn
   mediaArtShown=0
@@ -788,7 +806,7 @@ class HomeActivity:Activity() {
  }
  /** Steps through moving sky, still sky and the original picture; the change shows at once behind the page. */
  private fun cycleSky(){
-  val next=sky.mode.next();AppPreferences.setHomeSky(this,next.key);sky.applyMode(root);sky.setRunning(hasWindowFocus() && resumed)
+  val next=sky.mode.next();AppPreferences.setHomeSky(this,next.key);sky.applyMode(root);updateSky()
   (currentFocus as? TextView)?.let{v->val label="Home background";val copy=android.text.SpannableString(label+"\n"+next.label);copy.setSpan(android.text.style.AbsoluteSizeSpan(p(20)),label.length+1,copy.length,0);v.text=copy;v.contentDescription="$label, ${next.label}"}
  }
  private fun searchPage(){

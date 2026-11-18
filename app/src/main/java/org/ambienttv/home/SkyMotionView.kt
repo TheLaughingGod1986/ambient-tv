@@ -107,11 +107,19 @@ internal class SkyMotionView(c:Context):View(c) {
  }
  private fun birdsAllowed(s:SkyScene)=(s.weather==SkyWeather.CLEAR || s.weather==SkyWeather.PARTLY_CLOUDY) && s.part!=DayPart.NIGHT && s.part!=DayPart.DUSK
 
- /** Starts or stops redrawing. Stopped, the view keeps its last frame and costs nothing. */
+ /**
+  * Starts or stops redrawing. Stopped, the view keeps its last frame and costs nothing. Asking a running sky
+  * to run again (Home back in view, a screensaver ending) counts as activity, so a sky that had come to rest moves.
+  */
  fun setRunning(value:Boolean){
-  if(running==value)return
+  if(running==value){if(value){lastActivity=SystemClock.uptimeMillis();invalidate()};return}
   running=value;lastFrame=0L;removeCallbacks(resume);removeCallbacks(nextFrame);lastActivity=SystemClock.uptimeMillis()
   if(value)invalidate()
+ }
+ /** A frame asked for while the window was hidden is never drawn, which would end the redraw loop; start it again. */
+ override fun onWindowVisibilityChanged(visibility:Int){
+  super.onWindowVisibilityChanged(visibility)
+  if(visibility==VISIBLE && running){lastFrame=0L;invalidate()}
  }
  /** Freezes motion briefly after a remote press; the next press extends it. A press also wakes a resting sky. */
  fun yieldToRemote(){
@@ -121,6 +129,10 @@ internal class SkyMotionView(c:Context):View(c) {
   removeCallbacks(resume);postDelayed(resume,720L)
  }
 
+ /** Emulator checks only: frames in which the sky actually moved, whether it is running, and a way to make it rest. */
+ internal var framesForTest=0;private set
+ internal val runningForTest get()=running
+ internal fun restForTest(){lastActivity=SystemClock.uptimeMillis()-SkyPolicy.REST_AFTER_MS;removeCallbacks(nextFrame)}
  /** Emulator gallery only: moves everything on as if [seconds] had passed, without waiting. */
  internal fun advanceForTest(seconds:Float){val now=SystemClock.uptimeMillis();repeat((seconds*30).toInt()){step(1/30f,now)};invalidate()}
  private fun step(dt:Float,now:Long){
@@ -149,7 +161,7 @@ internal class SkyMotionView(c:Context):View(c) {
   val quiet=now<quietUntil
   // Nobody has pressed a button for a while: hold the sky still until the next press.
   val resting=SkyPolicy.resting(now,lastActivity)
-  if(running && !quiet && !resting){val dt=if(lastFrame==0L)0f else ((now-lastFrame).coerceIn(0L,100L))/1000f;step(dt,now)}
+  if(running && !quiet && !resting){val dt=if(lastFrame==0L)0f else ((now-lastFrame).coerceIn(0L,100L))/1000f;step(dt,now);framesForTest++}
   lastFrame=now
   val unit=width/SkyRenderer.WIDTH
   canvas.save();canvas.scale(unit,unit)

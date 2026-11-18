@@ -112,6 +112,7 @@ internal class HomeSky(private val context:Context,private val preview:Boolean) 
  }
  fun yieldToRemote(){motion?.yieldToRemote()}
  internal val shownKeyForTest get()=shownKey
+ internal val motionViewForTest get()=motion
  fun release(){motion?.setRunning(false);worker.shutdownNow();handler.removeCallbacksAndMessages(null)}
 
  companion object {
