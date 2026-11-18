@@ -36,6 +36,10 @@ photo upload or API key is required. Your existing services may have their own t
 views on an emulator. They contain no personal photos or account history. Weather
 and media accounts are not connected. They are not photographs of a household TV.*
 
+## New in 0.2.9
+
+- When the screensaver ends, the moving sky starts again straight away instead of waiting for a remote press, and it holds still while the screensaver is showing. Android 9 TVs show the screensaver over Home without pausing it, so Home now follows the screensaver itself.
+
 ## New in 0.2.8
 
 - Home's background is a living sky drawn on the TV: the light changes from sunrise through morning, afternoon, sunset and dusk to a starry night with the real phase of the moon. With weather on, it shows the conditions outside: clouds drift, and rain, snow, fog or a thunderstorm move across the mountains.

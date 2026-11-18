@@ -87,9 +87,12 @@ redrawn only when `SkyScene.key` changes: the weather category, or the sun movin
 1.5°. Night therefore keeps one picture; near sunset a new one cross-fades in every
 ten minutes or so. The moving layer (`SkyMotionView`) is only as large as the visible strip,
 is a GPU layer, runs at 10-30 fps depending on the weather, and allocates nothing per frame.
-It stops when Home pauses or loses window focus (apps, screensaver, dialogs), when Android
-animations or battery saver are off, and for 0.7 s after every remote key press, so focus
-movement never shares a frame with it. Lightning is two soft pulses at most every 18 s.
+It stops when Home pauses or loses window focus (apps, dialogs), while a screensaver is
+showing, when Android animations or battery saver are off, and for 0.7 s after every remote
+key press, so focus movement never shares a frame with it. Android 9 TVs show a screensaver
+over Home without pausing it and need not return window focus when it ends, so Home follows
+`ACTION_DREAMING_STARTED`/`STOPPED`: still behind the screensaver, moving again (and counted
+as activity) when it ends. Lightning is two soft pulses at most every 18 s.
 Without a fresh weather reading the sky is fair and partly cloudy rather than a guess.
 With a reading, `SkyDetail` adds wind (cloud speed and direction, rain slant; sunrise is on
 the left of the strip, so a west wind blows leftwards), cloud cover (how many clouds) and
@@ -103,7 +106,9 @@ original picture.
 
 Emulator helpers: `-PtvTestRunner=org.ambienttv.home.SkyGallery` renders Home for 14 hours and
 weathers into `files/sky-gallery`; `-PtvTestRunner=org.ambienttv.home.SkyPerf` compares frame
-times against the original picture at rest and while browsing. A software-rendered emulator
+times against the original picture at rest and while browsing; `-PtvTestRunner=org.ambienttv.home.SkyDream`
+checks that the sky stops behind a screensaver and moves again by itself afterwards, using both
+Android 9's screensaver signals and the emulator's real screensaver. A software-rendered emulator
 is far slower than TV hardware: use those numbers only to compare, and measure on the TV.
 
 Daily photo selection uses the Europe/London calendar day, retains its chosen
