@@ -192,6 +192,13 @@ internal object SkyPolicy {
  fun drift(across:Double?):Float=when{across==null->1f;abs(across)<3->.5f;else->(sign(across)*(.6+abs(across)/12).coerceIn(.5,3.0)).toFloat()}
  /** Sideways run of a raindrop per unit of fall, signed. */
  fun slant(across:Double?):Float=when{across==null->.17f;abs(across)<3->.05f;else->(sign(across)*(.05+abs(across)/90).coerceAtMost(.5)).toFloat()}
+ /**
+  * How long the sky waits after a remote press before drawing again, so the frame that moves focus never
+  * shares its time with a sky frame. Short enough to skip only a frame or two of the sky: it must not look paused.
+  */
+ const val YIELD_MS=90L
+ /** The most the sky moves on in one frame, however long it has been since the last one. */
+ const val MAX_STEP_MS=100L
  /** After this long without a remote press the moving sky holds still until the next press. */
  const val REST_AFTER_MS=10*60*1000L
  fun resting(now:Long,lastActivity:Long)=now-lastActivity>=REST_AFTER_MS

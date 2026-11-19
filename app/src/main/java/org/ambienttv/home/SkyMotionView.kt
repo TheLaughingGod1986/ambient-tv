@@ -8,7 +8,7 @@ import kotlin.math.*
 
 /**
  * The moving part of the Home sky, drawn above the still scene and below every control.
- * It redraws at a low, capped frame rate, only while Home is in front, and pauses for a moment
+ * It redraws at a low, capped frame rate, only while Home is in front, and skips a frame or two
  * whenever the remote is used so focus movement always has the whole frame budget.
  */
 internal class SkyMotionView(c:Context):View(c) {
@@ -121,12 +121,16 @@ internal class SkyMotionView(c:Context):View(c) {
   super.onWindowVisibilityChanged(visibility)
   if(visibility==VISIBLE && running){lastFrame=0L;invalidate()}
  }
- /** Freezes motion briefly after a remote press; the next press extends it. A press also wakes a resting sky. */
+ /**
+  * A remote press gets the next frames to itself: the sky drops the frame it had planned, waits a moment and
+  * carries on from where it was, so it never looks paused. Holding a direction keeps it still until the key
+  * is released. A press also wakes a resting sky.
+  */
  fun yieldToRemote(){
   if(!running)return
   lastActivity=SystemClock.uptimeMillis()
-  quietUntil=lastActivity+700L
-  removeCallbacks(resume);postDelayed(resume,720L)
+  quietUntil=lastActivity+SkyPolicy.YIELD_MS
+  removeCallbacks(nextFrame);removeCallbacks(resume);postDelayed(resume,SkyPolicy.YIELD_MS+4)
  }
 
  /** Emulator checks only: frames in which the sky actually moved, whether it is running, and a way to make it rest. */
@@ -161,7 +165,7 @@ internal class SkyMotionView(c:Context):View(c) {
   val quiet=now<quietUntil
   // Nobody has pressed a button for a while: hold the sky still until the next press.
   val resting=SkyPolicy.resting(now,lastActivity)
-  if(running && !quiet && !resting){val dt=if(lastFrame==0L)0f else ((now-lastFrame).coerceIn(0L,100L))/1000f;step(dt,now);framesForTest++}
+  if(running && !quiet && !resting){val dt=if(lastFrame==0L)0f else ((now-lastFrame).coerceIn(0L,SkyPolicy.MAX_STEP_MS))/1000f;step(dt,now);framesForTest++}
   lastFrame=now
   val unit=width/SkyRenderer.WIDTH
   canvas.save();canvas.scale(unit,unit)

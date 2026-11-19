@@ -88,8 +88,12 @@ redrawn only when `SkyScene.key` changes: the weather category, or the sun movin
 ten minutes or so. The moving layer (`SkyMotionView`) is only as large as the visible strip,
 is a GPU layer, runs at 10-30 fps depending on the weather, and allocates nothing per frame.
 It stops when Home pauses or loses window focus (apps, dialogs), while a screensaver is
-showing, when Android animations or battery saver are off, and for 0.7 s after every remote
-key press, so focus movement never shares a frame with it. Android 9 TVs show a screensaver
+showing, and when Android animations or battery saver are off. After every remote key press it
+gives way for `SkyPolicy.YIELD_MS` (90 ms): the frame it had planned is dropped, so focus
+movement never shares a frame with it, and it then carries on from where it was. One step moves
+it on by at most `MAX_STEP_MS`, so the wait is not seen as a pause; holding a direction keeps it
+still until the key is released. (Up to 0.2.9 the wait was 0.7 s, which looked like a stutter,
+most of all in rain.) Android 9 TVs show a screensaver
 over Home without pausing it and need not return window focus when it ends, so Home follows
 `ACTION_DREAMING_STARTED`/`STOPPED`: still behind the screensaver, moving again (and counted
 as activity) when it ends. Lightning is two soft pulses at most every 18 s.
@@ -108,7 +112,9 @@ Emulator helpers: `-PtvTestRunner=org.ambienttv.home.SkyGallery` renders Home fo
 weathers into `files/sky-gallery`; `-PtvTestRunner=org.ambienttv.home.SkyPerf` compares frame
 times against the original picture at rest and while browsing; `-PtvTestRunner=org.ambienttv.home.SkyDream`
 checks that the sky stops behind a screensaver and moves again by itself afterwards, using both
-Android 9's screensaver signals and the emulator's real screensaver. A software-rendered emulator
+Android 9's screensaver signals and the emulator's real screensaver;
+`-PtvTestRunner=org.ambienttv.home.WakeReturn` plays out Home before the network is back (see
+"After standby" below) against a loopback server. A software-rendered emulator
 is far slower than TV hardware: use those numbers only to compare, and measure on the TV.
 
 Daily photo selection uses the Europe/London calendar day, retains its chosen
@@ -249,6 +255,28 @@ Library pages show `HomeLayout.LIBRARY_COLUMNS` poster-shaped cards a row and
 adds the day's chance of rain when the service returns it. `DimPolicy` draws an
 optional dark overlay over Home and both screensaver layouts between 21:00 and
 07:00 by the TV's clock; it is off until enabled in Photo connection settings.
+
+## After standby
+
+A TV shows Home several seconds before its network is back after standby (on the Android 9
+set this was measured on: Home at once, Wi-Fi eleven seconds later). Everything Home asks for in
+that gap fails, so nothing may treat one failure as final:
+
+- `RetryPolicy` gives the waits after a failure: 4, 10, 25, 60 and 120 seconds, then none.
+  `WeatherStore` counts failed tries in a row and uses those waits before falling back to its
+  fifteen-minute pause; Home schedules the retry itself while it is in front. Continue Watching
+  stills use the same waits per card.
+- Home registers a default-network callback while it is in front. A network that was missing
+  and returns runs the pending retries at once and lifts the weather pause. A network that was
+  there all along changes nothing, so returning to Home adds no requests.
+- `ArtDisk` keeps the row's stills as small JPEGs in `cacheDir/row-art` (at most 24, named by
+  a hash). A copy younger than a day is drawn without a request; an older one is drawn and then
+  refreshed. Disconnecting Plex clears the folder.
+- `PlexFeed` keeps its last list through a short outage (`OutageGrace`: failures within two
+  minutes of each other are one outage, and the list goes after three minutes of it). Dropping
+  it on the first failure made the Plex cards vanish at every wake and redraw the whole row.
+- With no reading young enough to show, the header says "Checking the weather…" while quick
+  tries remain and "Weather unavailable" after that.
 
 ## One app at a time
 

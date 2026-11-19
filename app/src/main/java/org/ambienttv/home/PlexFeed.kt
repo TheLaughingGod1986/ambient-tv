@@ -29,12 +29,16 @@ internal object PlexFeed {
  }
  private var discoveredAt=0L
  private var refreshedAt=0L
+ // A list that cannot be refreshed is kept through a short outage: after standby the TV shows Home several
+ // seconds before its network is back, and the cards should not vanish and return. A lasting outage drops it.
+ private val outage=OutageGrace(180_000L,120_000L)
+ private fun dropIfLasting(){val now=android.os.SystemClock.elapsedRealtime();if(outage.failed(now) && now-refreshedAt>600000)cached=emptyList()}
  fun hasSession(c:Context)=PlexApi.vault(c).read()!=null
  fun status(c:Context)=c.getSharedPreferences("plex-status",0).getString("message","Connect Plex to add its Continue Watching items.")!!
  private fun status(c:Context,s:String){c.getSharedPreferences("plex-status",0).edit().putString("message",s).apply()}
- private fun resetSessionCache(){artSources=emptyMap();servers.clear();catalogThumbs.clear();catalogPages.clear();animeTags.clear();artwork.clear();cached=emptyList();discoveredAt=0;refreshedAt=0;WatchNextReader.clearDirectPlex()}
- @Synchronized fun acceptSession(c:Context,token:String){resetSessionCache();HomeDismissals.rotatePlexScope(c);PlexApi.vault(c).save("https://plex.tv",token)}
- @Synchronized fun clear(c:Context){PlexApi.vault(c).clear();resetSessionCache();status(c,"Plex disconnected from Ambient TV.")}
+ private fun resetSessionCache(){outage.succeeded();artSources=emptyMap();servers.clear();catalogThumbs.clear();catalogPages.clear();animeTags.clear();artwork.clear();cached=emptyList();discoveredAt=0;refreshedAt=0;WatchNextReader.clearDirectPlex()}
+ @Synchronized fun acceptSession(c:Context,token:String){resetSessionCache();ArtDisk.clear(c);HomeDismissals.rotatePlexScope(c);PlexApi.vault(c).save("https://plex.tv",token)}
+ @Synchronized fun clear(c:Context){PlexApi.vault(c).clear();resetSessionCache();ArtDisk.clear(c);status(c,"Plex disconnected from Ambient TV.")}
  @Synchronized fun read(c:Context,force:Boolean=false):List<WatchItem>{
   val token=PlexApi.vault(c).read()?.second ?: return emptyList()
   if(!force && ResumeFeedPolicy.fresh(android.os.SystemClock.elapsedRealtime(),refreshedAt,60000) && servers.isNotEmpty())return watchItems()
@@ -46,7 +50,7 @@ internal object PlexFeed {
     next.addAll(PlexProtocol.parseHub(server.id,body,allowNextEpisodes=true))
    }catch(_:Exception){allReached=false;break}
    if(allReached){
-    cached=next.distinctBy{it.server+":"+it.ratingKey}.take(12);refreshedAt=android.os.SystemClock.elapsedRealtime()
+    outage.succeeded();cached=next.distinctBy{it.server+":"+it.ratingKey}.take(12);refreshedAt=android.os.SystemClock.elapsedRealtime()
     c.getSharedPreferences("plex-status",0).edit().putLong("successAt",System.currentTimeMillis()).apply()
     status(c,"Connected to Plex · ${cached.size} continue watching items");publishArtwork();return watchItems()
    }
@@ -78,10 +82,10 @@ internal object PlexFeed {
      }catch(_:Exception){/* Try the next advertised connection; never log its token or URL. */}
     }
    }
-   if(connected>0){discoveredAt=android.os.SystemClock.elapsedRealtime();c.getSharedPreferences("plex-status",0).edit().putLong("successAt",System.currentTimeMillis()).apply();cached=next.distinctBy{it.server+":"+it.ratingKey}.take(12);refreshedAt=android.os.SystemClock.elapsedRealtime();status(c,"Connected to Plex · ${cached.size} continue watching items")}
-   else{status(c,"Signed in to Plex, but no server could be reached securely. Check that your Plex server is available.");if(android.os.SystemClock.elapsedRealtime()-refreshedAt>600000)cached=emptyList()}
-  }catch(e:PlexHttpFailure){if(e.status==401)resetSessionCache();status(c,if(e.status==401)"Plex sign-in needs reconnecting." else "Plex could not refresh right now.");if(android.os.SystemClock.elapsedRealtime()-refreshedAt>600000)cached=emptyList()}
-  catch(_:Exception){status(c,"Could not reach Plex. Your existing Plex app login is unchanged.");if(android.os.SystemClock.elapsedRealtime()-refreshedAt>600000)cached=emptyList()}
+   if(connected>0){outage.succeeded();discoveredAt=android.os.SystemClock.elapsedRealtime();c.getSharedPreferences("plex-status",0).edit().putLong("successAt",System.currentTimeMillis()).apply();cached=next.distinctBy{it.server+":"+it.ratingKey}.take(12);refreshedAt=android.os.SystemClock.elapsedRealtime();status(c,"Connected to Plex · ${cached.size} continue watching items")}
+   else{status(c,"Signed in to Plex, but no server could be reached securely. Check that your Plex server is available.");dropIfLasting()}
+  }catch(e:PlexHttpFailure){if(e.status==401)resetSessionCache();status(c,if(e.status==401)"Plex sign-in needs reconnecting." else "Plex could not refresh right now.");dropIfLasting()}
+  catch(_:Exception){status(c,"Could not reach Plex. Your existing Plex app login is unchanged.");dropIfLasting()}
   publishArtwork()
   return watchItems()
  }
