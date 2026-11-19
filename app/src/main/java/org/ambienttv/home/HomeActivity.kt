@@ -84,10 +84,56 @@ class HomeActivity:Activity() {
  private var nextId=1000
  private val titleColor=Color.rgb(240,247,252)
  private val tick=object:Runnable { override fun run() { if(!isFinishing) { updateHeader();if(page=="Home")updateHomePhotos();refreshPhotos();refreshWeather();handler.postDelayed(this,60000-System.currentTimeMillis()%60000) } } }
- /** The store rate-limits itself; a new reading is drawn as soon as it arrives instead of at the next minute. */
+ private val weatherRetry=Runnable{if(resumed)refreshWeather()}
+ /**
+  * The store rate-limits itself; a new reading is drawn as soon as it arrives instead of at the next minute.
+  * A failed try is repeated shortly while Home is in front: after standby the first one usually goes out before
+  * the TV's network is back.
+  */
  private fun refreshWeather() {
-  if(previewFiles==null)WeatherStore.refresh(applicationContext){handler.post{if(!isFinishing && !isDestroyed)updateHeader()}}
+  if(previewFiles!=null)return
+  WeatherStore.refresh(applicationContext){handler.post{if(!isFinishing && !isDestroyed){updateHeader();scheduleWeatherRetry()}}}
+  scheduleWeatherRetry()
  }
+ private fun scheduleWeatherRetry(){
+  handler.removeCallbacks(weatherRetry)
+  if(resumed)WeatherStore.retryDelay(applicationContext)?.let{handler.postDelayed(weatherRetry,it+250)}
+ }
+ /** True while Home is in front without a network, as in the first seconds after the TV wakes. */
+ @Volatile private var offline=false
+ private var watchingNetwork=false
+ /** Stills in the row now shown that are waiting to be tried again; the network coming back tries them at once. */
+ private val artWaiting=mutableListOf<Runnable>()
+ private val networkBack=Runnable{
+  if(resumed){
+   if(previewFiles==null){WeatherStore.networkBack(applicationContext);refreshWeather()}
+   if(page=="Home"){
+    // Stills that have used up their tries are asked for again by drawing the row afresh.
+    if(artWaiting.isEmpty() && mediaArtShown<displayedWatchItems.size)mediaSignature=nothingDrawn
+    artWaiting.toList().forEach{handler.removeCallbacks(it);it.run()}
+    loadWatchNext(true)
+   }
+  }
+ }
+ private val networkWatch=object:android.net.ConnectivityManager.NetworkCallback(){
+  // Only a network that was missing counts as coming back; one that was there all along changes nothing.
+  override fun onAvailable(network:android.net.Network){if(offline){offline=false;handler.removeCallbacks(networkBack);handler.postDelayed(networkBack,1500)}}
+  override fun onLost(network:android.net.Network){offline=true}
+ }
+ private fun watchNetwork(on:Boolean){
+  val manager=getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager ?: return
+  try{
+   if(on && !watchingNetwork){
+    offline=manager.activeNetwork==null
+    if(Build.VERSION.SDK_INT>=24)manager.registerDefaultNetworkCallback(networkWatch)
+    else manager.registerNetworkCallback(android.net.NetworkRequest.Builder().addCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET).build(),networkWatch)
+    watchingNetwork=true
+   }else if(!on && watchingNetwork){watchingNetwork=false;handler.removeCallbacks(networkBack);manager.unregisterNetworkCallback(networkWatch)}
+  }catch(_:Exception){}
+ }
+ /** Emulator checks only: how many stills the Continue Watching row is showing, and the network coming back. */
+ internal fun artShownForTest()=mediaArtShown
+ internal fun networkBackForTest(){networkBack.run()}
  private fun refreshPhotos() {
   if(previewFiles!=null)return
   val before=getSharedPreferences("state",0).getString("generation","")
@@ -183,13 +229,15 @@ class HomeActivity:Activity() {
   if(previewFiles==null && !observingFeed && Build.VERSION.SDK_INT>=26)try{contentResolver.registerContentObserver(android.media.tv.TvContract.WatchNextPrograms.CONTENT_URI,true,feedObserver);observingFeed=true}catch(_:Exception){}
   refreshFeedOnReturn();handler.removeCallbacks(feedPoll);handler.postDelayed(feedPoll,60000)
   handler.removeCallbacks(tick);handler.post(tick)
+  if(previewFiles==null)watchNetwork(true)
  }
  /** A dialog or overlay taking focus from Home stops the moving sky; it resumes when Home has focus again. */
  override fun onWindowFocusChanged(hasFocus:Boolean){super.onWindowFocusChanged(hasFocus);updateSky(hasFocus)}
  /** Any remote press briefly freezes the sky, so focus movement never shares a frame with it. */
  override fun dispatchKeyEvent(event:KeyEvent):Boolean{if(event.action==KeyEvent.ACTION_DOWN && ::sky.isInitialized)sky.yieldToRemote();return super.dispatchKeyEvent(event)}
  override fun onPause() {resumed=false;updateSky();rememberFocus();feedActive=false;feedSeen=false;feedState.pause();handler.removeCallbacks(feedRead);handler.removeCallbacks(nativeRead);nativeWorker.queue.clear();handler.removeCallbacks(feedPoll);handler.removeCallbacks(feedReturnRetry);handler.removeCallbacks(feedReturnFinalRetry)
-  if(observingFeed){contentResolver.unregisterContentObserver(feedObserver);observingFeed=false};handler.removeCallbacks(tick);super.onPause() }
+  if(observingFeed){contentResolver.unregisterContentObserver(feedObserver);observingFeed=false};handler.removeCallbacks(tick)
+  watchNetwork(false);handler.removeCallbacks(weatherRetry);artWaiting.forEach{handler.removeCallbacks(it)};artWaiting.clear();super.onPause() }
  override fun onTrimMemory(level:Int) {
   super.onTrimMemory(level)
   // Leaving Home drops what can be rebuilt from local data: decoded pictures, and app icons (so
@@ -203,7 +251,7 @@ class HomeActivity:Activity() {
  override fun onDestroy() { unregisterReceiver(homePress);unregisterReceiver(dreamWatch);if(::sky.isInitialized)sky.release();epoch++;handler.removeCallbacksAndMessages(null);worker.shutdownNow();artworkWorker.shutdownNow();nativeWorker.shutdownNow();catalogWorker.shutdownNow();appsWorker.shutdownNow();feedWorker.shutdownNow();if(::root.isInitialized)clearPage();PhotoThumbs.clear();ArtThumbs.clear();super.onDestroy() }
  private fun clearPage() {
   sidebarScrim?.animate()?.cancel();sidebarScrim=null;navViews.clear();sidebarExpanded=null;epoch++;mediaEpoch++;worker.queue.clear();artworkWorker.queue.clear();nativeWorker.queue.clear();catalogWorker.queue.clear();appsWorker.queue.clear();focusViews.clear();photoSlots.clear();mediaSignature=nothingDrawn
-  mediaArtShown=0
+  mediaArtShown=0;artWaiting.forEach{handler.removeCallbacks(it)};artWaiting.clear()
   // Photos and artwork are released everywhere. Icons inside the reused Home tiles are part of the tile and stay.
   val kept=homeCards.map{it.first}
   fun detach(view:View,reused:Boolean){
@@ -913,6 +961,7 @@ class HomeActivity:Activity() {
   val oldKey=displayedWatchItems.getOrNull(oldIndex)?.stableKey
   val newIndex=ResumeFeedPolicy.focusIndex(oldKey,oldIndex,items.map{it.stableKey});displayedWatchItems=items
   mediaSignature=signature;mediaEpoch++;val revision=mediaEpoch;val token=epoch
+  artWaiting.forEach{handler.removeCallbacks(it)};artWaiting.clear()
   fun detach(v:View){if(v is ImageView)v.setImageDrawable(null);if(v is ViewGroup)for(i in 0 until v.childCount)detach(v.getChildAt(i))}
   detach(mediaHost);mediaHost.removeAllViews();mediaArtShown=0;focusViews.keys.filter{it.startsWith("media:")}.toList().forEach{focusViews.remove(it)}
   mediaHeading?.text="Continue Watching  ›"
@@ -933,17 +982,29 @@ class HomeActivity:Activity() {
    image.scaleType=ImageView.ScaleType.FIT_CENTER;image.setPadding(p(90),p(14),p(90),p(60))
    // Decoded stills are shared with later rebuilds of this row, so an unchanged card never flickers.
    val artKey="row:"+item.art
-   fun showArt(bitmap:Bitmap){image.setPadding(0,0,0,0);image.scaleType=ImageView.ScaleType.CENTER_CROP;image.setImageBitmap(bitmap);mediaArtShown++}
-   fun loadArt(retry:Boolean){artworkWorker.execute imageJob@{
+   var artShown=false
+   fun showArt(bitmap:Bitmap){image.setPadding(0,0,0,0);image.scaleType=ImageView.ScaleType.CENTER_CROP;image.setImageBitmap(bitmap);if(!artShown){artShown=true;mediaArtShown++}}
+   fun loadArt(attempt:Int){artworkWorker.execute imageJob@{
     if(token!=epoch || revision!=mediaEpoch || !feedActive)return@imageJob
-    val bitmap=WatchNextReader.art(this,item.art)?.also{ArtThumbs.put(artKey,ThumbEntry(it,null))}
+    // The still kept from last time is drawn first, so the row is complete before the network is back after standby.
+    val kept=if(attempt==0)ArtDisk.read(this,item.art) else null
+    if(kept!=null){
+     ArtThumbs.put(artKey,ThumbEntry(kept.bitmap,null))
+     handler.post{if(token==epoch && revision==mediaEpoch && !isDestroyed)showArt(kept.bitmap)}
+     if(kept.fresh)return@imageJob
+    }
+    val bitmap=WatchNextReader.art(this,item.art)?.also{ArtThumbs.put(artKey,ThumbEntry(it,null));ArtDisk.write(this,item.art,it)}
     handler.post{
      if(token!=epoch || revision!=mediaEpoch || isDestroyed)return@post
      if(bitmap!=null)showArt(bitmap)
-     else if(retry && feedActive)handler.postDelayed({if(feedActive && token==epoch && revision==mediaEpoch)loadArt(false)},3000)
+     // Tried again a few times, further apart each time; the network coming back tries at once.
+     else if(feedActive)RetryPolicy.delay(attempt+1)?.let{wait->
+      val again=object:Runnable{override fun run(){artWaiting.remove(this);if(feedActive && token==epoch && revision==mediaEpoch)loadArt(attempt+1)}}
+      artWaiting.add(again);handler.postDelayed(again,wait)
+     }
     }
    }}
-   val saved=ArtThumbs.get(artKey);if(saved!=null)showArt(saved.photo)else loadArt(true)
+   val saved=ArtThumbs.get(artKey);if(saved!=null)showArt(saved.photo)else if(item.art.isNotBlank())loadArt(0)
    watchedProgress?.let{actual->
     // Two plain views cost far less to create than a themed ProgressBar.
     card.addView(View(this).apply{setBackgroundColor(Color.rgb(70,78,92))},FrameLayout.LayoutParams(-1,maxOf(1,p(4)),Gravity.BOTTOM))

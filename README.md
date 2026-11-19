@@ -26,7 +26,7 @@ photo upload or API key is required. Your existing services may have their own t
 - **A photo screensaver.** A large image, matching backdrop, clock and small previews; classic multi-photo layouts are available too.
 - **Old memories and new pictures.** For a chosen person in Synology Photos Personal Space, a bounded pool mixes recent photos with older memories. Cached photos stay available offline.
 - **Continue Watching.** Read eligible Android TV records and optionally connect Plex for real progress and server-provided next episodes. Hold OK on a card to hide it locally.
-- **A living sky.** The scene behind Home follows the time of day (sunrise, morning, afternoon, sunset, dusk and night) and, with weather on, the weather: drifting clouds, rain, snow, fog or a gentle thunderstorm. It pauses whenever the remote is used. Choose a still sky or the original sunrise picture in Settings.
+- **A living sky.** The scene behind Home follows the time of day (sunrise, morning, afternoon, sunset, dusk and night) and, with weather on, the weather: drifting clouds, rain, snow, fog or a gentle thunderstorm. It gives way for a frame or two whenever the remote is used, without looking paused. Choose a still sky or the original sunrise picture in Settings.
 - **Optional weather.** Choose a place yourself. Weather starts switched off; the clock uses your TV's time zone.
 - **Optional Projectivy integration.** Use the photos as a wallpaper provider instead of making Ambient TV your Home app.
 
@@ -35,6 +35,14 @@ photo upload or API key is required. Your existing services may have their own t
 *These images are generated-scene demo renders from the Android app's production
 views on an emulator. They contain no personal photos or account history. Weather
 and media accounts are not connected. They are not photographs of a household TV.*
+
+## New in 0.2.10
+
+- After standby, the weather and the Continue Watching pictures appear as soon as the TV's network is back. A TV shows Home several seconds before its network returns, so Home's first requests fail; they are now repeated after a few seconds and at once when Android reports the network. Before, the weather waited fifteen minutes and a picture was tried twice and then left until the row changed.
+- Continue Watching pictures are kept on the TV (at most 24 small copies in the app's private cache), so the row is complete straight away, also before the network is back. Disconnecting Plex erases them.
+- Plex cards stay in the row through a short outage instead of disappearing and coming back.
+- With nothing recent to show, the weather header says "Checking the weather…" while a reading is on its way. "Weather unavailable" appears only after repeated failures.
+- The moving sky no longer stands still for most of a second after each remote press. It drops the one frame that would share time with the focus change and carries on from where it was.
 
 ## New in 0.2.9
 

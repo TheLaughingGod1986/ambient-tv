@@ -7,8 +7,8 @@ import android.os.Bundle
 import android.os.SystemClock
 
 /**
- * Emulator-only screensaver check: the moving sky holds still while a screensaver covers Home and moves
- * again by itself when it ends, without a remote press, even if it had come to rest beforehand.
+ * Emulator-only sky check: the moving sky keeps moving while the remote is used, holds still while a
+ * screensaver covers Home and moves again by itself when it ends, even if it had come to rest beforehand.
  * Covers Android 9's screensaver signals on their own (as a TV sends them) and the emulator's real
  * screensaver. Run with -PtvTestRunner=org.ambienttv.home.SkyDream.
  */
@@ -45,6 +45,13 @@ class SkyDream:Instrumentation() {
    fun moved(ms:Long):Int{val before=frames();SystemClock.sleep(ms);return frames()-before}
    waitUntil("the sky to move"){moved(400)>2}
    fun rest(){runOnMainSync{motion.restForTest()};SystemClock.sleep(300);check(moved(1000)==0){"A resting sky must hold still"}}
+
+   // A press every 300 ms, as when browsing: the sky gives way for a frame or two each time but keeps moving.
+   val start=frames()
+   repeat(8){sendKeyDownUpSync(if(it%2==0)android.view.KeyEvent.KEYCODE_DPAD_RIGHT else android.view.KeyEvent.KEYCODE_DPAD_LEFT);SystemClock.sleep(300)}
+   val browsing=frames()-start
+   check(browsing>8){"The sky must keep moving while the remote is used (frames=$browsing)"}
+   results.putString("browsing","moved $browsing frames during 8 presses about 300 ms apart")
 
    for(rested in listOf(false,true)){
     val label=if(rested)"rested before" else "moving before"

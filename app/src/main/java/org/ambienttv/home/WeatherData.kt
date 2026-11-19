@@ -58,9 +58,10 @@ data class WeatherData(val temperatureC: Double, val code: Int, val isDay: Boole
 
 data class WeatherPanel(val temperature: String, val condition: String, val freshness: String, val code: Int?, val isDay: Boolean, val range: String?=null) {
  companion object {
-  fun from(data: WeatherData?, now: Long, failed: Boolean=false, zone:TimeZone=TimeZone.getDefault()): WeatherPanel {
+  /** [checking]: nothing recent is held but a reading is on its way, as in the first seconds after the TV wakes. */
+  fun from(data: WeatherData?, now: Long, failed: Boolean=false, zone:TimeZone=TimeZone.getDefault(), checking: Boolean=false): WeatherPanel {
    if(data==null || now-data.observedAt>90*60*1000L || data.observedAt>now+900000)
-    return WeatherPanel("—", "Weather unavailable", "Photos continue offline",null,true)
+    return WeatherPanel("—", if(checking) "Checking the weather…" else "Weather unavailable", "Photos continue offline",null,true)
    val time=SimpleDateFormat("HH:mm",Locale.getDefault()).apply { timeZone=zone }.format(Date(data.observedAt))
    val stale=now-data.observedAt>90*60*1000
    val suffix=if(stale) " · stale" else if(failed) " · offline" else ""
@@ -87,8 +88,17 @@ object WeatherLayout {
 }
 
 object WeatherFetchPolicy {
- fun shouldFetch(now: Long, fetchedAt: Long?, attemptedAt: Long): Boolean {
-  if(fetchedAt!=null && now-fetchedAt in 0 until WeatherData.TTL) return false
-  return attemptedAt<=0 || now-attemptedAt !in 0 until 15*60*1000L
+ const val SLOW_RETRY=15*60*1000L
+ private fun held(now: Long, fetchedAt: Long?)=fetchedAt!=null && now-fetchedAt in 0 until WeatherData.TTL
+ /**
+  * [failures] counts failed tries in a row. The first few are retried quickly, because a TV shows Home before
+  * its network is back after standby; after that a source that keeps failing is asked every fifteen minutes.
+  */
+ fun shouldFetch(now: Long, fetchedAt: Long?, attemptedAt: Long, failures: Int=Int.MAX_VALUE): Boolean {
+  if(held(now,fetchedAt)) return false
+  val wait=if(failures<=0) 0L else RetryPolicy.delay(failures) ?: SLOW_RETRY
+  return attemptedAt<=0 || now-attemptedAt !in 0 until wait
  }
+ /** True while a new reading can be expected shortly: none is held and the quick tries are not used up. */
+ fun expecting(now: Long, fetchedAt: Long?, failures: Int)=!held(now,fetchedAt) && failures<RetryPolicy.QUICK
 }

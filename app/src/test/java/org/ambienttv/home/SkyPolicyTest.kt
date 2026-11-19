@@ -97,4 +97,10 @@ class SkyPolicyTest {
  @Test fun theSkyRestsAfterTenQuietMinutes(){
   assertFalse(SkyPolicy.resting(1_000_000L,1_000_000L-9*60_000L));assertTrue(SkyPolicy.resting(1_000_000L,1_000_000L-10*60_000L))
  }
+ @Test fun aRemotePressCostsTheSkyNoMoreThanItCanMakeUp(){
+  // The sky moves on by at most MAX_STEP_MS in one frame, so a wait within that is never seen as a pause.
+  assertTrue(SkyPolicy.YIELD_MS<=SkyPolicy.MAX_STEP_MS)
+  // Long enough to keep clear of the frame that moves focus (60 frames a second: under 17 ms each).
+  assertTrue(SkyPolicy.YIELD_MS>=3*17)
+ }
 }

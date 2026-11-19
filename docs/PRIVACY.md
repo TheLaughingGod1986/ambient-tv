@@ -11,7 +11,7 @@ household photo library, device backup, network configuration or signing key.
 | Demo photos | Three bundled scenery images | Copied into the app's private directory; no photo service |
 | Synology Photos | Your entered NAS address, login and selected person | Directly to your NAS; selected thumbnails are cached on the TV |
 | Plex connection | A linking code, revocable token and discovered servers | Plex's linking/resource services and your authorized Plex server |
-| Continue Watching | Eligible records published by installed media apps | Read locally; card artwork may be fetched from the record's artwork address |
+| Continue Watching | Eligible records published by installed media apps | Read locally; card artwork may be fetched from the record's artwork address, and small copies of the pictures shown on Home are kept in the app's private cache |
 | Weather, off by default | Coordinates you choose | Open-Meteo over HTTPS; the provider also sees the request's network address |
 | Clock | TV time and time zone | Rendered locally |
 | Optional Home bridge | Window package names from the original launcher | Used locally to open Ambient TV; does not store screen text |
@@ -44,6 +44,9 @@ local integrations; this is not an HTTPS-only app.
 ## Why Android asks for permissions
 
 - **Internet:** NAS, Plex, published media artwork and optional weather.
+- **Network state:** Home is told when the TV's network comes back, for example a few
+  seconds after standby, and then asks again for weather and artwork that failed
+  without it. No network details are read or stored.
 - **TV listings / EPG read:** read the system's eligible Watch Next records. Some
   TV firmware restricts this even when the app requests it.
 - **Close background apps:** when Home opens an app, it asks Android to close the
@@ -66,7 +69,7 @@ Projectivy UID. It does not expose the photo directory to arbitrary apps.
 and cached source photos and attempts to revoke that session. Other Synology apps
 and your original NAS files are unaffected. **Use demo photos** only changes which
 collection is displayed; it is not a logout or data-erasure action. Use **Disconnect Plex from Ambient TV** in photo connection settings to erase
-its local Plex token and memory caches. This does not revoke the token at Plex;
+its local Plex token, memory caches and the kept Continue Watching pictures. This does not revoke the token at Plex;
 you can revoke the app authorization in your Plex account too. Uninstalling the app removes its private app
 data; you can also revoke authorizations at the source services.
 
