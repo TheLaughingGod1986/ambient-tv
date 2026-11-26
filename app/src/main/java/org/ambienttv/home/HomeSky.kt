@@ -109,8 +109,11 @@ internal class HomeSky(private val context:Context,private val preview:Boolean) 
   wanted=value
   val allowed=(!preview || motionForTest) && mode==HomeSkyMode.LIVING && try{MutedPalette.motionAllowed(android.provider.Settings.Global.getFloat(context.contentResolver,android.provider.Settings.Global.ANIMATOR_DURATION_SCALE,1f),(context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager).isPowerSaveMode)}catch(_:Exception){false}
   motion?.setRunning(value && allowed)
+  backdrop.setWatched(value)
  }
- fun yieldToRemote(){motion?.yieldToRemote()}
+ fun yieldToRemote(){motion?.yieldToRemote();backdrop.yieldToRemote()}
+ /** Home has come to the front (switch-on, back from an app or the screensaver): the next sky appears without a fade. */
+ fun arrived(){backdrop.arrived()}
  internal val shownKeyForTest get()=shownKey
  internal val motionViewForTest get()=motion
  fun release(){motion?.setRunning(false);worker.shutdownNow();handler.removeCallbacksAndMessages(null)}

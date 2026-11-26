@@ -9,6 +9,8 @@ import android.os.SystemClock
 /**
  * Emulator-only sky check: the moving sky keeps moving while the remote is used, holds still while a
  * screensaver covers Home and moves again by itself when it ends, even if it had come to rest beforehand.
+ * Also checks how a new sky replaces the old one behind Home: in a few separate steps while watched, at once
+ * otherwise, and never with one redraw after another.
  * Covers Android 9's screensaver signals on their own (as a TV sends them) and the emulator's real
  * screensaver. Run with -PtvTestRunner=org.ambienttv.home.SkyDream.
  */
@@ -52,6 +54,57 @@ class SkyDream:Instrumentation() {
    val browsing=frames()-start
    check(browsing>8){"The sky must keep moving while the remote is used (frames=$browsing)"}
    results.putString("browsing","moved $browsing frames during 8 presses about 300 ms apart")
+
+   // A new sky behind Home. The old cross-fade redrew the full-screen backdrop every frame for 1.5 s, which on
+   // the TV meant 15-17 frames of about 90 ms in a row. Now: a few separate redraws while Home is watched, and
+   // at once when Home has just come to the front, behind a screensaver, or while a fade is already running.
+   var hour=13
+   fun nextScene():SkyScene{hour++;return SkyPolicy.scene(1794873600000L+hour*3_600_000L,51.5,-0.12,63)}
+   lateinit var backdrop:HomeBackdropView
+   runOnMainSync{backdrop=home.skyForTest().backdrop}
+   fun showAndWait(scene:SkyScene){
+    runOnMainSync{home.skyForTest().show(scene)}
+    waitUntil("the new sky"){var key:String?=null;runOnMainSync{key=home.skyForTest().shownKeyForTest};key==scene.key}
+   }
+   fun fading():Boolean{var f=false;runOnMainSync{f=backdrop.fadingForTest};return f}
+   fun draws():Int{var n=0;runOnMainSync{n=backdrop.drawsForTest};return n}
+   fun settled(){runOnMainSync{backdrop.arrivedForTest(BackdropFade.ARRIVAL_MS+1_000L)}}
+
+   runOnMainSync{home.skyForTest().arrived()}
+   var before=draws();showAndWait(nextScene())
+   check(!fading()){"A sky that arrives just after Home comes to the front must appear at once"}
+   SystemClock.sleep(800)
+   val atOnce=draws()-before
+   check(atOnce<=2){"A sky shown at once must cost one redraw of the backdrop (redraws=$atOnce)"}
+   results.putString("sky on arrival","appeared at once with $atOnce backdrop redraw(s)")
+
+   settled();before=draws();showAndWait(nextScene())
+   check(fading()){"A sky that changes while Home is watched must fade"}
+   val fadeStart=SystemClock.elapsedRealtime()
+   waitUntil("the fade to end"){!fading()}
+   val fadeMs=SystemClock.elapsedRealtime()-fadeStart;SystemClock.sleep(300)
+   val stepped=draws()-before
+   check(stepped in BackdropFade.STEPS-1..BackdropFade.STEPS+2){"A fade must be ${BackdropFade.STEPS} separate redraws (redraws=$stepped)"}
+   check(fadeMs<=BackdropFade.STEPS*BackdropFade.STEP_MS+1_500L){"A fade must end within about a second (took $fadeMs ms)"}
+   results.putString("sky while watched","faded in $stepped backdrop redraws over $fadeMs ms")
+
+   // Presses put off the next step, so a step's redraw never shares a frame with moving focus; it ends afterwards.
+   settled();showAndWait(nextScene())
+   repeat(10){sendKeyDownUpSync(if(it%2==0)android.view.KeyEvent.KEYCODE_DPAD_RIGHT else android.view.KeyEvent.KEYCODE_DPAD_LEFT);SystemClock.sleep(100)}
+   check(fading()){"Remote presses must hold the fade's next step"}
+   waitUntil("the fade to end after the presses"){!fading()}
+   results.putString("sky while pressing","fade held during 10 quick presses, finished after them")
+
+   // A second sky during a fade replaces it at once instead of starting another fade.
+   settled();showAndWait(nextScene());check(fading()){"A sky that changes while Home is watched must fade"}
+   showAndWait(nextScene())
+   check(!fading()){"A sky arriving during a fade must appear at once, not chain a second fade"}
+
+   // Behind a screensaver nobody sees the change: at once, and nothing redrawn step by step under it.
+   runOnMainSync{home.dreamForTest(true)};settled();before=draws();showAndWait(nextScene())
+   check(!fading()){"A sky that changes behind the screensaver must appear at once"}
+   runOnMainSync{home.dreamForTest(false)}
+   results.putString("sky behind screensaver","appeared at once with ${draws()-before} backdrop redraw(s)")
 
    for(rested in listOf(false,true)){
     val label=if(rested)"rested before" else "moving before"

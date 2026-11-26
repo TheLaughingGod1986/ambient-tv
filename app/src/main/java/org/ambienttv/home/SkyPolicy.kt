@@ -205,3 +205,21 @@ internal object SkyPolicy {
  /** Gentle, infrequent lightning: a soft brightening every 18-45 seconds, far below any flashing threshold. */
  fun nextLightningMs(random:java.util.Random)=18_000L+random.nextInt(27_000)
 }
+
+/**
+ * How a newly rendered sky replaces the one behind Home. Each fade frame redraws the whole full-screen
+ * backdrop, which on a 2 GB TV takes 35-90 ms, so a fade redrawn every frame made Home stutter for its whole
+ * length. Instead the new sky comes in over a few separate steps, and appears at once whenever nobody is
+ * watching it change: when Home has only just come to the front (switch-on, back from an app or the
+ * screensaver, when Home is busiest), behind a screensaver, for the first sky, or while a fade is running.
+ */
+internal object BackdropFade {
+ const val STEPS=5
+ const val STEP_MS=250L
+ /** After Home comes to the front, new skies appear at once for this long: weather after a switch-on lands within it. */
+ const val ARRIVAL_MS=30_000L
+ fun fades(now:Long,arrivedAt:Long,watched:Boolean,first:Boolean,fading:Boolean)=
+  watched && !first && !fading && now-arrivedAt>=ARRIVAL_MS
+ /** Opacity of the new sky after [step] of [STEPS] steps. */
+ fun alpha(step:Int)=255*step.coerceIn(0,STEPS)/STEPS
+}

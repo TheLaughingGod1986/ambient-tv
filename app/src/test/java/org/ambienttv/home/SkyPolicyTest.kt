@@ -103,4 +103,30 @@ class SkyPolicyTest {
   // Long enough to keep clear of the frame that moves focus (60 frames a second: under 17 ms each).
   assertTrue(SkyPolicy.YIELD_MS>=3*17)
  }
+ @Test fun aNewSkyFadesOnlyWhileSomeoneIsWatchingHome(){
+  val arrived=5_000_000L;val settled=arrived+BackdropFade.ARRIVAL_MS
+  // Home on screen for a while, a sky already shown, no fade running: the light changing during the afternoon.
+  assertTrue(BackdropFade.fades(settled,arrived,watched=true,first=false,fading=false))
+  // Just switched on or back from an app: the scene changed while nobody looked, and Home is busiest now.
+  assertFalse(BackdropFade.fades(arrived,arrived,true,false,false))
+  assertFalse(BackdropFade.fades(settled-1,arrived,true,false,false))
+  // Weather arriving after a switch-on (the network takes about 10-20 s to come back) lands within the arrival time.
+  assertTrue(BackdropFade.ARRIVAL_MS>=25_000L)
+  // Behind a screensaver, or for the very first sky: at once.
+  assertFalse(BackdropFade.fades(settled,arrived,watched=false,first=false,fading=false))
+  assertFalse(BackdropFade.fades(settled,arrived,true,first=true,fading=false))
+  // A second sky never chains a second fade onto a running one.
+  assertFalse(BackdropFade.fades(settled,arrived,true,false,fading=true))
+ }
+ @Test fun aFadeIsAFewSeparateRedrawsThatEndFullyShown(){
+  // The old fade redrew the full-screen backdrop every frame for 1.5 s; on the TV that was 15-17 frames of 90 ms.
+  assertTrue(BackdropFade.STEPS in 3..6)
+  val opacities=(1..BackdropFade.STEPS).map{BackdropFade.alpha(it)}
+  assertEquals(opacities.sorted(),opacities);assertEquals(opacities.size,opacities.toSet().size)
+  assertTrue(opacities.first() in 1..254);assertEquals(255,opacities.last())
+  assertEquals(0,BackdropFade.alpha(0));assertEquals(255,BackdropFade.alpha(BackdropFade.STEPS+3))
+  // Steps far enough apart that a slow redraw finishes long before the next one, and the whole change stays short.
+  assertTrue(BackdropFade.STEP_MS>=200L)
+  assertTrue(BackdropFade.STEP_MS*(BackdropFade.STEPS-1)<=1_500L)
+ }
 }

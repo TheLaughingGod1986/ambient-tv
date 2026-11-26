@@ -36,6 +36,10 @@ photo upload or API key is required. Your existing services may have their own t
 views on an emulator. They contain no personal photos or account history. Weather
 and media accounts are not connected. They are not photographs of a household TV.*
 
+## New in 0.2.11
+
+- Home no longer stutters for a second or two when it comes to the front after a while (switching the TV on, pressing Home after an app) or when the weather arrives. A new sky used to cross-fade in by redrawing the whole background in every frame, which a TV with 2 GB of memory cannot do smoothly. Now a new sky appears at once when Home has just come to the front, and otherwise changes in five quiet steps that give way to remote presses.
+
 ## New in 0.2.10
 
 - After standby, the weather and the Continue Watching pictures appear as soon as the TV's network is back. A TV shows Home several seconds before its network returns, so Home's first requests fail; they are now repeated after a few seconds and at once when Android reports the network. Before, the weather waited fifteen minutes and a picture was tried twice and then left until the row changed.
