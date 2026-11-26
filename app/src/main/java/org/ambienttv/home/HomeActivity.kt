@@ -192,6 +192,8 @@ class HomeActivity:Activity() {
  private var dreaming=false
  private val dreamWatch=object:BroadcastReceiver(){override fun onReceive(context:Context?,intent:Intent?){
   dreaming=intent?.action==Intent.ACTION_DREAMING_STARTED
+  // Coming back from the screensaver is an arrival: a sky that changed behind it appears without a fade.
+  if(!dreaming && ::sky.isInitialized)sky.arrived()
   updateSky()
   // Home's window may still be coming back as the screensaver ends; ask once more after it has drawn.
   handler.removeCallbacks(skyAfterDream);if(!dreaming)handler.postDelayed(skyAfterDream,800)
@@ -220,7 +222,7 @@ class HomeActivity:Activity() {
  }
  override fun onRequestPermissionsResult(code:Int,permissions:Array<out String>,results:IntArray){super.onRequestPermissionsResult(code,permissions,results);if(code==42 && page=="Home")showPage("Home")}
  override fun onNewIntent(intent:Intent) {super.onNewIntent(intent);setIntent(intent);if(intent.hasCategory(Intent.CATEGORY_HOME)){if(page!="Home")showPage("Home");refreshFeedOnReturn()}}
- override fun onResume() { super.onResume();resumed=true;if(::sky.isInitialized)sky.applyMode(root);updateHeader() // settings may have changed weather or dimming while away
+ override fun onResume() { super.onResume();resumed=true;if(::sky.isInitialized){sky.applyMode(root);sky.arrived()};updateHeader() // settings may have changed weather or dimming while away
   updateSky()
   if(compactLayout!=getSharedPreferences("home-ui",0).getBoolean("compactSidebar",false))showPage(page);handler.post(sidebarUpdate);feedActive=true
   // The viewer can remove a favourite; show the Favourites grid as it is now.

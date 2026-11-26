@@ -5,7 +5,8 @@ import android.os.SystemClock
 import android.view.View
 /**
  * Quiet native ambience behind Home. With [living] it shows the code-drawn sky for the hour and weather,
- * cross-fading when the scene changes; otherwise the bundled mountain photograph. No animation of its own.
+ * changing it in a few steps when the scene changes; otherwise the bundled mountain photograph. It never
+ * redraws frame after frame: the moving parts of the sky live in the small [SkyMotionView] above it.
  */
 internal class HomeBackdropView(c:Context,private val sunrise:Boolean=false,private val living:Boolean=false):View(c) {
  private var mountains:Bitmap?=null
@@ -22,16 +23,42 @@ internal class HomeBackdropView(c:Context,private val sunrise:Boolean=false,priv
  private var cropped=false
  private val headerArea=RectF(104f,0f,1920f,360f)
  private var scene:Bitmap?=null
+ /** The sky being faded out, or null when no fade is running. */
  private var previous:Bitmap?=null
- private var fadeStart=0L
- private var fadeMs=1L
+ private var step=BackdropFade.STEPS
+ private var watched=false
+ private var arrivedAt=0L
  private val fadePaint=Paint(Paint.FILTER_BITMAP_FLAG)
- /** Shows a newly rendered sky. The first one fades in from the navy base; later ones cross-fade. */
+ private val nextStep=Runnable{advance()}
+ /**
+  * Shows a newly rendered sky: in a few separate steps while someone is watching Home, otherwise at once
+  * (see [BackdropFade]). Each step redraws this full-screen layer once; between steps nothing is redrawn.
+  */
  fun showScene(next:Bitmap){
   if(!living)return
-  previous=scene;scene=next
-  fadeMs=if(previous==null)600L else 1500L;fadeStart=SystemClock.uptimeMillis();invalidate()
+  val fade=BackdropFade.fades(SystemClock.uptimeMillis(),arrivedAt,watched,scene==null,previous!=null)
+  removeCallbacks(nextStep)
+  if(fade){previous=scene;step=1;postDelayed(nextStep,BackdropFade.STEP_MS)}else{previous=null;step=BackdropFade.STEPS}
+  scene=next;invalidate()
  }
+ private fun advance(){
+  if(previous==null)return
+  step++
+  if(step>=BackdropFade.STEPS){previous=null;step=BackdropFade.STEPS}else postDelayed(nextStep,BackdropFade.STEP_MS)
+  invalidate()
+ }
+ /** Home has just come to the front: skies that arrive in the next moments appear at once. */
+ fun arrived(){arrivedAt=SystemClock.uptimeMillis()}
+ /** Whether Home is in front with nothing covering it. Unwatched, a running fade ends and new skies appear at once. */
+ fun setWatched(value:Boolean){watched=value;if(!value)finishFade()}
+ /** A remote press puts off the next fade step, so the step's redraw never shares a frame with moving focus. */
+ fun yieldToRemote(){if(previous!=null){removeCallbacks(nextStep);postDelayed(nextStep,BackdropFade.STEP_MS)}}
+ private fun finishFade(){if(previous!=null){removeCallbacks(nextStep);previous=null;step=BackdropFade.STEPS;invalidate()}}
+ override fun onDetachedFromWindow(){super.onDetachedFromWindow();removeCallbacks(nextStep);previous=null;step=BackdropFade.STEPS}
+ /** Emulator checks only: how many times the backdrop was drawn, whether a fade is running, and an earlier arrival. */
+ internal var drawsForTest=0;private set
+ internal val fadingForTest get()=previous!=null
+ internal fun arrivedForTest(millisAgo:Long){arrivedAt=SystemClock.uptimeMillis()-millisAgo}
  /** Keep only the rows the header shows, at the size they are drawn, instead of the whole panorama. */
  private fun headerStrip(source:Bitmap):Bitmap? = try {
   val cropH=(source.width*360f/1816f).toInt().coerceAtMost(source.height);val top=(source.height-cropH)/2
@@ -51,10 +78,10 @@ internal class HomeBackdropView(c:Context,private val sunrise:Boolean=false,priv
   c.save();c.scale(width/1920f,height/1080f)
   p.shader=base;c.drawRect(0f,0f,1920f,1080f,p);p.shader=null
   if(living){
-   val progress=((SystemClock.uptimeMillis()-fadeStart).toFloat()/fadeMs).coerceIn(0f,1f)
-   previous?.let{if(progress<1f){fadePaint.alpha=255;c.drawBitmap(it,null,headerArea,fadePaint)}}
-   scene?.let{fadePaint.alpha=(progress*255).toInt();c.drawBitmap(it,null,headerArea,fadePaint)}
-   if(progress<1f)postInvalidateOnAnimation()else previous=null
+   drawsForTest++
+   val fading=previous
+   if(fading!=null){fadePaint.alpha=255;c.drawBitmap(fading,null,headerArea,fadePaint)}
+   scene?.let{fadePaint.alpha=if(fading!=null)BackdropFade.alpha(step) else 255;c.drawBitmap(it,null,headerArea,fadePaint)}
   }
   val mountains=this.mountains
   if(!living && mountains!=null){

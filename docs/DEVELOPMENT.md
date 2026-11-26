@@ -84,8 +84,14 @@ pages share the living sky (or the original mountain sunrise) and stacked clock/
 The still scene (sky, sun or moon, stars, cloud deck, five mountain ranges, valley mist and
 forest) is drawn in code into one header-sized bitmap on a low-priority thread. It is
 redrawn only when `SkyScene.key` changes: the weather category, or the sun moving about
-1.5°. Night therefore keeps one picture; near sunset a new one cross-fades in every
-ten minutes or so. The moving layer (`SkyMotionView`) is only as large as the visible strip,
+1.5°. Night therefore keeps one picture; near sunset a new one arrives every
+ten minutes or so. The backdrop that holds it is a full-screen GPU layer, and every redraw of it
+costs 35-90 ms on a 2 GB TV, so a new picture never fades frame by frame (up to 0.2.10 it did,
+for 1.5 s, which made Home stutter for that long at every switch-on and return to Home).
+`BackdropFade` brings it in over five separate redraws 250 ms apart while Home is watched, puts
+off the next step after a remote press, and shows it at once when nobody is watching it change:
+for 30 s after Home comes to the front (switch-on, back from an app or the screensaver), behind a
+screensaver, for the first picture, and when a fade is already running. The moving layer (`SkyMotionView`) is only as large as the visible strip,
 is a GPU layer, runs at 10-30 fps depending on the weather, and allocates nothing per frame.
 It stops when Home pauses or loses window focus (apps, dialogs), while a screensaver is
 showing, and when Android animations or battery saver are off. After every remote key press it
